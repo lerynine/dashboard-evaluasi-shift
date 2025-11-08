@@ -6,13 +6,20 @@ import axios from "axios";
 import { db } from "../firebase";
 import {
   doc,
-  updateDoc,
   setDoc,
+  updateDoc,
   getDoc,
-  collection,
+  getDocs,
   addDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
   serverTimestamp,
+  Timestamp
 } from "firebase/firestore";
+
 
 export default function InputPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -49,15 +56,63 @@ export default function InputPage() {
 
       setBerthLoading(true);
       try {
-        const docRef = doc(db, "berth", formData.terminal);
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-          setBerthData(snap.data());
+        const berthDocRef = doc(db, "berth", formData.terminal);
+        const berthSnap = await getDoc(berthDocRef);
+
+        if (berthSnap.exists()) {
+          const data = berthSnap.data();
+
+          // 🔹 Cek setiap berth yang terisi kapal
+          const updates = {};
+          const now = new Date();
+
+          for (const [berthName, shipName] of Object.entries(data)) {
+            if (shipName) {
+              // Ambil dokumen laporan terbaru berdasarkan nama kapal
+              const laporanRef = collection(db, "laporan");
+              const q = query(
+                laporanRef,
+                where("namaKapal", "==", shipName),
+                orderBy("createdAt", "desc"),
+                limit(1)
+              );
+
+              const snap = await getDocs(q);
+
+              if (!snap.empty) {
+                const latestDoc = snap.docs[0].data();
+                const etdStr = latestDoc.etd;
+
+                if (etdStr) {
+                  const etd = new Date(etdStr);
+
+                  // Jika waktu sekarang sudah lewat ETD, kosongkan berth
+                  if (now > etd) {
+                    console.log(
+                      `⏰ ${shipName} di ${berthName} sudah lewat ETD (${etd.toLocaleString()}) – dikosongkan.`
+                    );
+                    updates[berthName] = ""; // hanya hapus value-nya, field tetap ada
+                  }
+                }
+              }
+            }
+          }
+
+          // Jika ada yang perlu dikosongkan, update Firestore
+          if (Object.keys(updates).length > 0) {
+            await updateDoc(berthDocRef, updates);
+            console.log("✅ Berth dikosongkan:", updates);
+            // Ambil ulang data terbaru setelah update
+            const refreshedSnap = await getDoc(berthDocRef);
+            setBerthData(refreshedSnap.data());
+          } else {
+            setBerthData(data);
+          }
         } else {
           setBerthData({});
         }
       } catch (err) {
-        console.error("Error fetching berth data:", err);
+        console.error("❌ Error fetching berth data:", err);
         setBerthData({});
       } finally {
         setBerthLoading(false);
@@ -71,16 +126,14 @@ export default function InputPage() {
   e.preventDefault();
 
   // 🔹 Validasi angka decimal
-  const decimalFields = ["jumlahMuatan", "realisasiBongkar", "perencanaanShift", "realisasiShift"];
+  const decimalFields = ["jumlahMuatan", "realisasiBongkarMuat", "perencanaanShift", "realisasiShift"];
   for (let field of decimalFields) {
     const value = formData[field];
-    // Ganti koma dengan titik untuk parsing
     const normalized = value?.toString().replace(",", ".");
     if (value === undefined || value === "" || isNaN(Number(normalized))) {
       alert(`Kolom "${field}" harus berupa angka desimal yang valid!\nContoh: 100, 150.5`);
-      return; // hentikan submit
+      return;
     } else {
-      // simpan kembali sebagai number dengan titik
       formData[field] = Number(normalized);
     }
   }
@@ -90,13 +143,11 @@ export default function InputPage() {
   try {
     let imageUrl = "";
 
+    // 🔹 Upload file ke Cloudinary jika ada
     if (file) {
       const formDataCloud = new FormData();
       formDataCloud.append("file", file);
-      formDataCloud.append(
-        "upload_preset",
-        process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET
-      );
+      formDataCloud.append("upload_preset", process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET);
 
       const res = await axios.post(
         `https://api.cloudinary.com/v1_1/${process.env.REACT_APP_CLOUDINARY_CLOUD_NAME}/image/upload`,
@@ -105,18 +156,49 @@ export default function InputPage() {
       imageUrl = res.data.secure_url;
     }
 
+    // 🔹 Konversi ETB, ETD, First Line, dan First D/L ke Timestamp Firestore
+    let etbTimestamp = null;
+    let etdTimestamp = null;
+    let firstLineTimestamp = null;
+    let firstDLTimestamp = null;
+
+    if (formData.etb) {
+      const etbDate = new Date(formData.etb);
+      if (!isNaN(etbDate)) etbTimestamp = Timestamp.fromDate(etbDate);
+    }
+
+    if (formData.etd) {
+      const etdDate = new Date(formData.etd);
+      if (!isNaN(etdDate)) etdTimestamp = Timestamp.fromDate(etdDate);
+    }
+
+    if (formData.firstLine) {
+      const flDate = new Date(formData.firstLine);
+      if (!isNaN(flDate)) firstLineTimestamp = Timestamp.fromDate(flDate);
+    }
+
+    if (formData.firstDL) {
+      const fdlDate = new Date(formData.firstDL);
+      if (!isNaN(fdlDate)) firstDLTimestamp = Timestamp.fromDate(fdlDate);
+    }
+
+    // 🔹 Tentukan jenis kemasan akhir
     const finalJenisKemasan =
       formData.jenisKemasan === "Yang lain..."
         ? formData.jenisKemasanLain || "Lain-lain"
         : formData.jenisKemasan;
 
+    // 🔹 Simpan ke Firestore
     await addDoc(collection(db, "laporan"), {
       ...formData,
+      etb: etbTimestamp,
+      etd: etdTimestamp,
       jenisKemasan: finalJenisKemasan,
       lampiran: imageUrl || null,
       createdAt: serverTimestamp(),
     });
 
+    // 🔹 Update dokumen berth agar tambatan diisi nama kapal
     const terminalName = formData.terminal;
     const berthField = formData.tambatan?.toLowerCase();
     const shipName = formData.namaKapal;
@@ -136,14 +218,12 @@ export default function InputPage() {
     setFile(null);
     setSubmitted(true);
   } catch (err) {
-    console.error("Error upload:", err);
+    console.error("❌ Error upload:", err);
     alert("Gagal menyimpan data!");
   } finally {
     setLoading(false);
   }
 };
-
-
 
   return (
     <PageWrapper>
@@ -358,6 +438,16 @@ export default function InputPage() {
             </Question>
 
             <Question>
+              <Label>First Line (Waktu Sandar Pertama)</Label>
+              <input type="datetime-local" name="firstLine" onChange={handleChange} />
+            </Question>
+
+            <Question>
+              <Label>First D/L (Waktu Bongkar/Muat Pertama)</Label>
+              <input type="datetime-local" name="firstDL" onChange={handleChange} />
+            </Question>
+
+            <Question>
               <Label>Activity Type</Label>
               <select name="activityType" onChange={handleChange}>
                 <option value="">Pilih Aktivitas</option>
@@ -481,7 +571,19 @@ export default function InputPage() {
               <Label>Realisasi Bongkar/Muat (ton) <span className="required">*</span></Label>
               <input
                 type="text"
-                name="realisasiBongkar"
+                name="realisasiBongkarMuat"
+                onChange={handleChange}
+                required
+                pattern="^\d*\.?\d*$"
+                inputMode="decimal"
+              />
+            </Question>
+
+            <Question>
+              <Label>Jumlah Hari <span className="required">*</span></Label>
+              <input
+                type="text"
+                name="day"
                 onChange={handleChange}
                 required
                 pattern="^\d*\.?\d*$"

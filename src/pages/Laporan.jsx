@@ -14,6 +14,7 @@ const Laporan = () => {
   const [shift, setShift] = useState("");
   const [laporanData, setLaporanData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [grup, setGrup] = useState("");
 
   const handleCari = async () => {
   if (!tanggal || !terminal || !shift) {
@@ -25,10 +26,9 @@ const Laporan = () => {
     setLoading(true);
     console.group("📅 [LAPORAN QUERY]");
     console.log("Tanggal input:", tanggal);
-    console.log("Terminal dipilih:", terminal);
+    console.log("Terminal dipilih (general):", terminal);
     console.log("Shift dipilih:", shift);
 
-    // Rentang waktu Firestore (UTC+7)
     const start = new Date(`${tanggal}T00:00:00+07:00`);
     const end = new Date(`${tanggal}T23:59:59+07:00`);
     console.log("Range waktu Firestore (lokal UTC+7):", {
@@ -36,48 +36,47 @@ const Laporan = () => {
       end: end.toISOString(),
     });
 
-    // Query utama
+    // Ambil semua laporan dalam range waktu dan shift
     const q = query(
       collection(db, "laporan"),
-      where("terminal", "==", terminal),
       where("shift", "==", shift),
       where("createdAt", ">=", start),
       where("createdAt", "<=", end)
     );
 
-    console.log("🔍 Query siap dijalankan...");
+    console.log("🔍 Query Firestore siap dijalankan...");
     const snapshot = await getDocs(q);
     console.log(`✅ ${snapshot.size} dokumen ditemukan`);
 
-    if (snapshot.empty) {
-      console.warn("⚠️ Tidak ditemukan data untuk kombinasi shift ini. Menjalankan fallback…");
-
-      // Ambil semua laporan di terminal + tanggal (tanpa filter shift)
-      const fallbackQ = query(
-        collection(db, "laporan"),
-        where("terminal", "==", terminal),
-        where("createdAt", ">=", start),
-        where("createdAt", "<=", end)
-      );
-      const fallbackSnap = await getDocs(fallbackQ);
-
-      console.log(`📄 Ditemukan ${fallbackSnap.size} dokumen fallback:`);
-      fallbackSnap.docs.forEach((doc) => {
-        const data = doc.data();
-        console.log({
-          id: doc.id,
-          shift: data.shift,
-          createdAt: data.createdAt?.toDate().toISOString(),
-          terminal: data.terminal,
-        });
+    // Filter manual di sisi client berdasarkan "terminal" yang mengandung kata yang dipilih
+    const filteredData = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((d) => {
+        const t = (d.terminal || "").toLowerCase();
+        return t.includes(terminal.toLowerCase());
       });
 
-      console.log(
-        "🧾 Perhatikan field 'shift' pada hasil di atas. Itu format yang dipakai di Firestore dan harus sama persis di query."
-      );
-    } else {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setLaporanData(data);
+    console.log(`📦 Setelah filter berdasarkan terminal "${terminal}": ${filteredData.length} dokumen`);
+
+    if (filteredData.length === 0) {
+      console.warn("⚠️ Tidak ada data cocok setelah filter terminal");
+    }
+
+    const data = filteredData.map((d) => {
+      const jumlahMuatan = parseFloat(d.jumlahMuatan) || 0;
+      const realisasi = parseFloat(d.realisasiBongkarMuat) || 0;
+      const balance = jumlahMuatan - realisasi;
+
+      return {
+        ...d,
+        balance: balance.toFixed(3),
+      };
+    });
+
+    setLaporanData(data);
+
+    if (data.length > 0 && data[0].grup) {
+      setGrup(data[0].grup);
     }
 
     console.groupEnd();
@@ -91,78 +90,112 @@ const Laporan = () => {
 
 
   const handleDownloadPDF = () => {
-    console.log("📦 Memulai generate PDF...");
-    const doc = new jsPDF("l", "mm", "a4");
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 10;
+  console.log("📦 Memulai generate PDF...");
+  const doc = new jsPDF("l", "mm", "a4");
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 10;
 
-    doc.setFontSize(14);
-    doc.text("NILAM KONVENSIONAL TERMINAL DIVISION", pageWidth / 2, 15, {
-      align: "center",
-    });
-    doc.setFontSize(12);
-    doc.text(`${tanggal}`, pageWidth / 2, 23, { align: "center" });
-    doc.text(
-      `SHIFT ${shift.toUpperCase()} - ${terminal.toUpperCase()}`,
-      pageWidth / 2,
-      30,
-      { align: "center" }
-    );
+  doc.setFontSize(14);
+  doc.text("NILAM KONVENSIONAL TERMINAL DIVISION", pageWidth / 2, 15, {
+    align: "center",
+  });
+  doc.setFontSize(12);
+  doc.text(`${tanggal}`, pageWidth / 2, 23, { align: "center" });
+  doc.text(
+    `SHIFT ${shift.toUpperCase()} GROUP ${grup?.toUpperCase() || "-"}`,
+    pageWidth / 2,
+    30,
+    { align: "center" }
+  );
 
-    let x = margin;
-    let y = 40;
-    let count = 0;
-
-    laporanData.forEach((item, i) => {
-      console.log(`🧾 Menambahkan kapal ke-${i + 1}:`, item.namaKapal);
-      doc.setFontSize(9);
-      doc.rect(x, y, 90, 100);
-
-      const baseY = y + 8;
-      const lines = [
-        ["NAME OF SHIP", item.namaKapal || "-"],
-        ["DERMAGA & KADE", item.dermaga || "-"],
-        ["SPMK", item.spmk || "-"],
-        ["PPK", item.ppk || "-"],
-        ["AGENT / STEV", item.agentStevedore || "-"],
-        ["COMMODITY", item.commodity || "-"],
-        ["ETB/ETD", `${item.etb || "-"} - ${item.etd || "-"}`],
-        ["FIRST LINE", item.firstLine || "-"],
-        ["START D/L", item.startDL || "-"],
-        ["EQUIPMENT", item.equipment || "-"],
-        ["DAY", item.day || "-"],
-        ["MANIFEST", item.manifest || "-"],
-        ["DISCH / SHIFT", item.dischShift || "-"],
-        ["PREVIOUS", item.previous || "-"],
-        ["BALANCE", item.balance || "-"],
-        ["ESTIMASI", item.estimasi || "-"],
-        ["COMPLETED", item.completed || "-"],
-        ["LAST LINE", item.lastLine || "-"],
-        ["NOT TIME", `${item.not_time_hours || 0} JAM`],
-        ["IDLE TIME", `${item.idle_time_hours || 0} JAM`],
-        ["EFFECTIVE TIME", `${item.effective_time_hours || 0} JAM`],
-        ["TGH", item.tgh || "-"],
-        ["KINERJA", item.kinerja || "-"],
-      ];
-
-      let textY = baseY;
-      lines.forEach(([label, value]) => {
-        doc.text(`${label} :`, x + 2, textY);
-        doc.text(String(value), x + 45, textY);
-        textY += 5;
+  const formatTimestamp = (ts) => {
+    if (!ts) return "-";
+    try {
+      const date =
+        ts.seconds !== undefined ? new Date(ts.seconds * 1000) : new Date(ts);
+      return date.toLocaleString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
       });
+    } catch {
+      return "-";
+    }
+  };
 
-      x += 95;
-      count++;
-      if (count % 3 === 0) {
-        x = margin;
-        y += 105;
-      }
+  let x = margin;
+  let y = 40;
+  let count = 0;
+
+  laporanData.forEach((item, i) => {
+    console.log(`🧾 Menambahkan kapal ke-${i + 1}:`, item.namaKapal);
+    doc.setFontSize(9);
+
+    const lines = [
+      ["NAME OF SHIP", item.namaKapal || "-"],
+      ["DERMAGA", item.terminal || "-"],
+      ["SPMK", item.spmk || "-"],
+      ["PPK", item.ppk || "-"],
+      ["AGENT / STEV", item.agentStevedore || "-"],
+      ["COMMODITY", item.jenisBarang || "-"],
+      ["ETB/ETD", `${formatTimestamp(item.etb)} / ${formatTimestamp(item.etd)}`],
+      ["FIRST LINE", formatTimestamp(item.firstLine)],
+      ["START D/L", formatTimestamp(item.startDL || item.firstDL)],
+      ["EQUIPMENT", item.equipment || "-"],
+      ["MANIFEST", item.jumlahMuatan || "-"],
+      ["DISCH / SHIFT", item.dischShift || "-"],
+      ["PREVIOUS", item.realisasiBongkarMuat || "-"],
+      [
+        "BALANCE",
+        item.balance ||
+          (item.jumlahMuatan && item.realisasiBongkarMuat
+            ? (parseFloat(item.jumlahMuatan) -
+                parseFloat(item.realisasiBongkarMuat)).toFixed(3)
+            : "-"),
+      ],
+      ["ESTIMASI", formatTimestamp(item.estimasi)],
+      ["COMPLETED", formatTimestamp(item.completed)],
+      ["LAST LINE", formatTimestamp(item.lastLine)],
+      ["NOT TIME", `${item.not_time_hours || 0} JAM`],
+      ["IDLE TIME", `${item.idle_time_hours || 0} JAM`],
+      ["EFFECTIVE TIME", `${item.effective_time_hours || 0} JAM`],
+      ["TGH", item.realisasiTgh || "-"],
+      ["KINERJA", item.remark || "-"],
+    ];
+
+    // 🔹 Hitung posisi titik dua tetap
+    const colonX = x + 30; // posisi titik dua di kolom kanan tetap
+    const valueX = colonX + 4; // jarak antara ":" dan value
+
+    const linesCount = lines.length;
+    const boxHeight = Math.max(100, linesCount * 5 + 10);
+    doc.rect(x, y, 90, boxHeight);
+
+    let textY = y + 8;
+
+    // 🔹 Cetak label rata kiri, titik dua sejajar
+    lines.forEach(([label, value]) => {
+      doc.text(label, x + 2, textY); // rata kiri
+      doc.text(":", colonX, textY); // titik dua sejajar
+      doc.text(String(value), valueX, textY); // value di kanan
+      textY += 5;
     });
 
-    doc.save(`Laporan_${terminal}_${tanggal}_${shift}.pdf`);
-    console.log("✅ PDF berhasil dibuat dan diunduh!");
-  };
+    x += 95;
+    count++;
+    if (count % 3 === 0) {
+      x = margin;
+      y += boxHeight + 5;
+    }
+  });
+
+  doc.save(`Laporan_${terminal}_${tanggal}_${shift}.pdf`);
+  console.log("✅ PDF berhasil dibuat dan diunduh!");
+};
+
+
 
   return (
     <PageWrapper>
@@ -188,19 +221,15 @@ const Laporan = () => {
               />
             </div>
             <div>
-              <Label>Dermaga</Label>
+              <Label>Terminal</Label>
               <Select
                 value={terminal}
                 onChange={(e) => setTerminal(e.target.value)}
               >
-                <option value="">Pilih Dermaga</option>
-                <option value="Jamrud Utara">Jamrud Utara</option>
-                <option value="Jamrud Selatan">Jamrud Selatan</option>
-                <option value="Jamrud Barat">Jamrud Barat</option>
-                <option value="Mirah Selatan">Mirah Selatan</option>
-                <option value="Mirah Timur">Mirah Timur</option>
-                <option value="Nilam Selatan">Nilam Selatan</option>
-                <option value="Nilam Utara">Nilam Utara</option>
+                <option value="">Pilih Terminal</option>
+                <option value="Jamrud">Jamrud</option>
+                <option value="Nilam">Nilam</option>
+                <option value="Mirah">Mirah</option>
               </Select>
             </div>
             <div>
@@ -235,16 +264,25 @@ const Laporan = () => {
             laporanData.map((item, i) => (
               <ReportCard key={i}>
                 <h3>{item.namaKapal || "-"}</h3>
-                <p><b>DERMAGA & KADE:</b> {item.dermaga}</p>
+                <p><b>DERMAGA:</b> {item.terminal}</p>
                 <p><b>SPMK:</b> {item.spmk}</p>
                 <p><b>PPK:</b> {item.ppk}</p>
                 <p><b>AGENT / STEV:</b> {item.agentStevedore}</p>
-                <p><b>COMMODITY:</b> {item.commodity}</p>
-                <p><b>ETB/ETD:</b> {item.etb} - {item.etd}</p>
+                <p><b>COMMODITY:</b> {item.jenisBarang}</p>
+                <p>
+                  <b>ETB/ETD:</b>{" "}
+                  {item.etb?.seconds
+                    ? new Date(item.etb.seconds * 1000).toLocaleString("id-ID")
+                    : "-"}{" "}
+                  -{" "}
+                  {item.etd?.seconds
+                    ? new Date(item.etd.seconds * 1000).toLocaleString("id-ID")
+                    : "-"}
+                </p>
                 <p><b>FIRST LINE:</b> {item.firstLine}</p>
-                <p><b>START D/L:</b> {item.startDL}</p>
+                <p><b>START D/L:</b> {item.firstDL}</p>
                 <p><b>DAY:</b> {item.day}</p>
-                <p><b>KINERJA:</b> {item.kinerja}</p>
+                <p><b>KINERJA:</b> {item.remark}</p>
               </ReportCard>
             ))
           ) : (
@@ -302,10 +340,13 @@ const SectionTitle = styled.h2`
 `;
 const FilterGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem; /* jarak antar kolom lebih lebar */
+  row-gap: 1.8rem; /* jarak vertikal antar baris */
+  margin-bottom: 1.5rem; /* jarak ke tombol */
+  align-items: end; /* agar input sejajar rapi */
 `;
+
 const Label = styled.label`
   font-weight: 600;
   color: #333;
@@ -343,23 +384,43 @@ const Button = styled.button`
 const ReportGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.2rem;
+  gap: 0.4rem; /* 🔹 semula 1.2rem → dipersempit */
+  align-items: start;
 `;
+
 const ReportCard = styled.div`
   background: white;
-  border-radius: 10px;
-  padding: 1rem;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  padding: 1rem 1.2rem; /* 🔹 sedikit dipersempit juga */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+  min-height: 550px;
+  height: auto;
+  box-sizing: border-box;
+
   h3 {
     color: #1e3a8a;
     text-align: center;
     margin-bottom: 0.5rem;
+    word-wrap: break-word;
   }
+
   p {
     font-size: 0.9rem;
-    margin: 0.2rem 0;
+    margin: 0.25rem 0;
+    word-wrap: break-word;
+  }
+
+  @media print {
+    min-height: auto;
+    box-shadow: none;
+    border: 1px solid #000;
+    page-break-inside: avoid;
   }
 `;
+
+
+
 const EmptyText = styled.p`
   text-align: center;
   color: #6b7280;

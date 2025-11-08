@@ -122,15 +122,15 @@ export default function Dashboard() {
   const realisasiTgh = d.realisasiTgh || "";
   const ketercapaian = d.ketercapaian || "";
   const jumlahMuatan = toNumber(d.jumlahMuatan);
-  const realisasiBongkar = toNumber(d.realisasiBongkar);
+  const realisasiBongkarMuat = toNumber(d.realisasiBongkarMuat);
   const perencanaanShift = toNumber(d.perencanaanShift);
   const realisasiShift = toNumber(d.realisasiShift);
   const tambatan = d.tambatan || "";
   const remark = d.remark || d.keterangan || "";
   const targetPerShift = perencanaanShift ? jumlahMuatan / perencanaanShift : 0;
   const totalTarget = targetPerShift * realisasiShift;
-  const status = realisasiBongkar >= totalTarget ? "ON SCHEDULE" : "DELAY";
-  const balance = jumlahMuatan - realisasiBongkar;
+  const status = realisasiBongkarMuat >= totalTarget ? "ON SCHEDULE" : "DELAY";
+  const balance = jumlahMuatan - realisasiBongkarMuat;
   const lampiran = d.lampiran || [];
 
   return {
@@ -141,7 +141,7 @@ export default function Dashboard() {
     realisasiTgh,
     ketercapaian,
     jumlahMuatan,
-    realisasiBongkar,
+    realisasiBongkarMuat,
     perencanaanShift,
     realisasiShift,
     balance,
@@ -384,7 +384,7 @@ export default function Dashboard() {
                 { key: "realisasiTgh", label: "Realisasi TGH" },
                 { key: "ketercapaian", label: "Ketercapaian TGH" },
                 { key: "jumlahMuatan", label: "Jumlah Bongkar/Muat Total" },
-                { key: "realisasiBongkar", label: "Realisasi Bongkar/Muat s.d Sekarang" },
+                { key: "realisasiBongkarMuat", label: "Realisasi Bongkar/Muat s.d Sekarang" },
                 { key: "perencanaanShift", label: "Perencanaan Jumlah Shift" },
                 { key: "realisasiShift", label: "Realisasi Jumlah Shift s.d Sekarang" },
                 { key: "balance", label: "Balance" },
@@ -406,7 +406,7 @@ export default function Dashboard() {
                 <td>{row.realisasiTgh}</td>
                 <td>{row.ketercapaian}</td>
                 <td>{row.jumlahMuatan}</td>
-                <td>{row.realisasiBongkar}</td>
+                <td>{row.realisasiBongkarMuat}</td>
                 <td>{row.perencanaanShift}</td>
                 <td>{row.realisasiShift}</td>
                 <td>{row.balance ? row.balance.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "-"}</td>
@@ -593,7 +593,7 @@ const QuayLayout = ({ data = [] }) => {
           terminal.includes("jamrud") &&
           (
             (terminal.includes("utara") && t.posisi === "top") ||
-            (terminal.includes("selatan") && t.posisi === "bottom")
+            (terminal.includes("selatan") && t.posisi === "bottom") ||
             (terminal.includes("barat") && t.posisi === "left")
           );
 
