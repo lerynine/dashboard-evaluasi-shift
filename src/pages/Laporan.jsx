@@ -5,7 +5,6 @@ import { db } from "../firebase";
 import Sidebar from "../components/Sidebar";
 import { FaBars, FaTimes } from "react-icons/fa";
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 
 const Laporan = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -67,11 +66,17 @@ const Laporan = () => {
       const realisasi = parseFloat(d.realisasiBongkarMuat) || 0;
       const balance = jumlahMuatan - realisasi;
 
+      // Misal: data punya field totalShift atau dihitung 1 per dokumen
+      const totalShift = parseFloat(d.perencanaanShift); // default 1 shift
+      const discShift = jumlahMuatan / totalShift;
+
       return {
         ...d,
-        balance: balance.toFixed(3),
+        balance: parseFloat(balance.toFixed(3)).toString(),
+        discShift: parseFloat(discShift.toFixed(3)).toString(),
       };
     });
+
 
     setLaporanData(data);
 
@@ -89,16 +94,25 @@ const Laporan = () => {
 };
 
 
-  const handleDownloadPDF = () => {
+const handleDownloadPDF = () => {
   console.log("📦 Memulai generate PDF...");
   const doc = new jsPDF("l", "mm", "a4");
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 10;
 
+  // 🔹 Tentukan judul PDF berdasarkan terminal
+  let judulPDF = "REPORT TERMINAL";
+  if (terminal.toLowerCase().includes("jamrud")) {
+    judulPDF = "REPORT TERMINAL JAMRUD";
+  } else if (terminal.toLowerCase().includes("mirah")) {
+    judulPDF = "REPORT TERMINAL MIRAH";
+  } else if (terminal.toLowerCase().includes("nilam")) {
+    judulPDF = "REPORT NILAM KONVENSIONAL";
+  }
+
+  // 🔹 Cetak header PDF
   doc.setFontSize(14);
-  doc.text("NILAM KONVENSIONAL TERMINAL DIVISION", pageWidth / 2, 15, {
-    align: "center",
-  });
+  doc.text(judulPDF, pageWidth / 2, 15, { align: "center" });
   doc.setFontSize(12);
   doc.text(`${tanggal}`, pageWidth / 2, 23, { align: "center" });
   doc.text(
@@ -107,6 +121,7 @@ const Laporan = () => {
     30,
     { align: "center" }
   );
+
 
   const formatTimestamp = (ts) => {
     if (!ts) return "-";
@@ -145,7 +160,7 @@ const Laporan = () => {
       ["START D/L", formatTimestamp(item.startDL || item.firstDL)],
       ["EQUIPMENT", item.equipment || "-"],
       ["MANIFEST", item.jumlahMuatan || "-"],
-      ["DISCH / SHIFT", item.dischShift || "-"],
+      ["DISCH / SHIFT", item.discShift || "-"],
       ["PREVIOUS", item.realisasiBongkarMuat || "-"],
       [
         "BALANCE",
@@ -155,14 +170,12 @@ const Laporan = () => {
                 parseFloat(item.realisasiBongkarMuat)).toFixed(3)
             : "-"),
       ],
-      ["ESTIMASI", formatTimestamp(item.estimasi)],
-      ["COMPLETED", formatTimestamp(item.completed)],
-      ["LAST LINE", formatTimestamp(item.lastLine)],
       ["NOT TIME", `${item.not_time_hours || 0} JAM`],
       ["IDLE TIME", `${item.idle_time_hours || 0} JAM`],
       ["EFFECTIVE TIME", `${item.effective_time_hours || 0} JAM`],
       ["TGH", item.realisasiTgh || "-"],
-      ["KINERJA", item.remark || "-"],
+      ["KINERJA", item.ketercapaian || "-"],
+      ["NOTE", item.remark || "-"],
     ];
 
     // 🔹 Hitung posisi titik dua tetap
@@ -170,16 +183,28 @@ const Laporan = () => {
     const valueX = colonX + 4; // jarak antara ":" dan value
 
     const linesCount = lines.length;
-    const boxHeight = Math.max(100, linesCount * 5 + 10);
+    // Tambahkan ruang ekstra untuk margin garis dan spasi tambahan
+const extraHeight = 20; // ruang ekstra untuk garis dan jarak tambahan
+const boxHeight = Math.max(100, linesCount * 5 + extraHeight);
+
     doc.rect(x, y, 90, boxHeight);
 
     let textY = y + 8;
 
-    // 🔹 Cetak label rata kiri, titik dua sejajar
     lines.forEach(([label, value]) => {
-      doc.text(label, x + 2, textY); // rata kiri
-      doc.text(":", colonX, textY); // titik dua sejajar
-      doc.text(String(value), valueX, textY); // value di kanan
+      // Jika label adalah NOT TIME atau KINERJA, tambahkan garis dengan margin
+      if (label === "NOT TIME" || label === "KINERJA") {
+        textY += 0; // beri jarak sebelum garis
+        const lineY = textY;
+        doc.setLineWidth(0.3);
+        doc.line(x + 1, lineY, x + 89, lineY);
+        textY += 3; // beri jarak lagi di bawah garis
+      }
+
+      // Tulis teks setelah jarak yang sesuai
+      doc.text(label, x + 2, textY);
+      doc.text(":", colonX, textY);
+      doc.text(String(value), valueX, textY);
       textY += 5;
     });
 
@@ -203,7 +228,7 @@ const Laporan = () => {
         <MenuButton onClick={() => setSidebarOpen(!sidebarOpen)}>
           {sidebarOpen ? <FaTimes /> : <FaBars />}
         </MenuButton>
-        <Title>Laporan Harian Bongkar Muat</Title>
+        <Title>Laporan</Title>
       </TopBar>
 
       <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
@@ -282,7 +307,8 @@ const Laporan = () => {
                 <p><b>FIRST LINE:</b> {item.firstLine}</p>
                 <p><b>START D/L:</b> {item.firstDL}</p>
                 <p><b>DAY:</b> {item.day}</p>
-                <p><b>KINERJA:</b> {item.remark}</p>
+                <p><b>KINERJA:</b> {item.ketercapaian}</p>
+                <p><b>NOTE:</b> {item.remark}</p>
               </ReportCard>
             ))
           ) : (
