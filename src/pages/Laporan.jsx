@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import Sidebar from "../components/Sidebar";
 import { FaBars, FaTimes } from "react-icons/fa";
@@ -14,213 +14,160 @@ const Laporan = () => {
   const [laporanData, setLaporanData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [grup, setGrup] = useState("");
+  
+  const emptyKapal = {
+    namaKapal: "",
+    spmk: "",
+    ppk: "",
+    jenisBarang: "",
+    etb: "",
+    etd: "",
+    remark: ""
+  };
 
-  const handleCari = async () => {
+  const [kapalList, setKapalList] = useState(Array(6).fill(emptyKapal));
+const handleSaveAndDownload = async () => {
   if (!tanggal || !terminal || !shift) {
-    alert("Harap pilih tanggal, terminal, dan shift terlebih dahulu");
+    alert("Mohon lengkapi Tanggal, Terminal, dan Shift");
     return;
   }
 
   try {
     setLoading(true);
-    console.group("📅 [LAPORAN QUERY]");
-    console.log("Tanggal input:", tanggal);
-    console.log("Terminal dipilih (general):", terminal);
-    console.log("Shift dipilih:", shift);
 
-    const start = new Date(`${tanggal}T00:00:00+07:00`);
-    const end = new Date(`${tanggal}T23:59:59+07:00`);
-    console.log("Range waktu Firestore (lokal UTC+7):", {
-      start: start.toISOString(),
-      end: end.toISOString(),
+    const payload = {
+      tanggal,
+      terminal,
+      shift,
+      grup: grup || "-",
+      kapalList,
+      createdAt: new Date(),
+    };
+
+    // 🔹 Simpan ke Firestore
+    await addDoc(collection(db, "laporan"), payload);
+
+    // ======================================================
+    // 🔹 Generate PDF langsung tanpa memanggil fungsi lain
+    // ======================================================
+    const doc = new jsPDF();
+
+    // ---------- HEADER ----------
+    const terminalTitle =
+      terminal.toLowerCase().includes("jamrud")
+        ? "JAMRUD TERMINAL DIVISION"
+        : terminal.toLowerCase().includes("nilam")
+        ? "NILAM KONVENSIONAL TERMINAL DIVISION"
+        : terminal.toLowerCase().includes("mirah")
+        ? "MIRAH TERMINAL DIVISION"
+        : "";
+
+    const formattedDate = new Date(tanggal).toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
     });
 
-    // Ambil semua laporan dalam range waktu dan shift
-    const q = query(
-      collection(db, "laporan"),
-      where("shift", "==", shift),
-      where("createdAt", ">=", start),
-      where("createdAt", "<=", end)
-    );
+    doc.setFontSize(14);
+    doc.text(terminalTitle, 105, 15, { align: "center" });
 
-    console.log("🔍 Query Firestore siap dijalankan...");
-    const snapshot = await getDocs(q);
-    console.log(`✅ ${snapshot.size} dokumen ditemukan`);
+    doc.setFontSize(12);
+    doc.text(formattedDate, 105, 22, { align: "center" });
 
-    // Filter manual di sisi client berdasarkan "terminal" yang mengandung kata yang dipilih
-    const filteredData = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .filter((d) => {
-        const t = (d.terminal || "").toLowerCase();
-        return t.includes(terminal.toLowerCase());
+    doc.text(`Shift ${shift} ${grup ? `Group ${grup}` : ""}`, 105, 29, {
+      align: "center",
+    });
+
+    doc.line(15, 33, 195, 33);
+
+    // ---------- GRID 6 BOX ----------
+    let x = 15;
+    let y = 40;
+    const boxWidth = 60;
+    const boxHeight = 45;
+
+    kapalList.forEach((kapal, index) => {
+      // Garis kotak
+      doc.rect(x, y, boxWidth, boxHeight);
+
+      // Judul di dalam kotak
+      doc.setFontSize(11);
+      doc.text(`KAPAL ${index + 1}`, x + boxWidth / 2, y + 6, {
+        align: "center",
       });
 
-    console.log(`📦 Setelah filter berdasarkan terminal "${terminal}": ${filteredData.length} dokumen`);
+      // Isi tabel
+      doc.setFontSize(9);
 
-    if (filteredData.length === 0) {
-      console.warn("⚠️ Tidak ada data cocok setelah filter terminal");
-    }
+      const fields = [
+        ["Nama Kapal", kapal.namaKapal || "-"],
+        ["SPMK", kapal.spmk || "-"],
+        ["PPK", kapal.ppk || "-"],
+        ["Jenis Barang", kapal.jenisBarang || "-"],
+        ["ETB", kapal.etb || "-"],
+        ["ETD", kapal.etd || "-"],
+        ["Remark", kapal.remark || "-"],
+      ];
 
-    const data = filteredData.map((d) => {
-      const jumlahMuatan = parseFloat(d.jumlahMuatan) || 0;
-      const realisasi = parseFloat(d.realisasiBongkarMuat) || 0;
-      const balance = jumlahMuatan - realisasi;
+      let textY = y + 14;
+      const valueX = x + 30;
 
-      // Misal: data punya field totalShift atau dihitung 1 per dokumen
-      const totalShift = parseFloat(d.perencanaanShift); // default 1 shift
-      const discShift = jumlahMuatan / totalShift;
+      fields.forEach(([label, value]) => {
+        doc.text(label, x + 4, textY);
+        doc.text(String(value), valueX, textY);
+        textY += 5;
+      });
 
-      return {
-        ...d,
-        balance: parseFloat(balance.toFixed(3)).toString(),
-        discShift: parseFloat(discShift.toFixed(3)).toString(),
-      };
+      // Pindah kolom
+      x += boxWidth + 5;
+
+      // Turun baris jika sudah 3 box
+      if ((index + 1) % 3 === 0) {
+        x = 15;
+        y += boxHeight + 8;
+      }
     });
 
+    // ---------- SAVE FILE ----------
+    doc.save(`Laporan_${terminal}_${tanggal}_${shift}.pdf`);
 
-    setLaporanData(data);
+    console.log("✅ Data tersimpan & PDF berhasil diunduh");
+    // ======================================================
 
-    if (data.length > 0 && data[0].grup) {
-      setGrup(data[0].grup);
-    }
-
-    console.groupEnd();
   } catch (err) {
-    console.error("❌ Error saat handleCari:", err);
-    console.groupEnd();
+    console.error("❌ Gagal menyimpan data:", err);
   } finally {
     setLoading(false);
   }
 };
 
 
-const handleDownloadPDF = () => {
-  console.log("📦 Memulai generate PDF...");
-  const doc = new jsPDF("l", "mm", "a4");
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 10;
-
-  // 🔹 Tentukan judul PDF berdasarkan terminal
-  let judulPDF = "REPORT TERMINAL";
-  if (terminal.toLowerCase().includes("jamrud")) {
-    judulPDF = "REPORT TERMINAL JAMRUD";
-  } else if (terminal.toLowerCase().includes("mirah")) {
-    judulPDF = "REPORT TERMINAL MIRAH";
-  } else if (terminal.toLowerCase().includes("nilam")) {
-    judulPDF = "REPORT NILAM KONVENSIONAL";
-  }
-
-  // 🔹 Cetak header PDF
-  doc.setFontSize(14);
-  doc.text(judulPDF, pageWidth / 2, 15, { align: "center" });
-  doc.setFontSize(12);
-  doc.text(`${tanggal}`, pageWidth / 2, 23, { align: "center" });
-  doc.text(
-    `SHIFT ${shift.toUpperCase()} GROUP ${grup?.toUpperCase() || "-"}`,
-    pageWidth / 2,
-    30,
-    { align: "center" }
-  );
-
-
-  const formatTimestamp = (ts) => {
-    if (!ts) return "-";
-    try {
-      const date =
-        ts.seconds !== undefined ? new Date(ts.seconds * 1000) : new Date(ts);
-      return date.toLocaleString("id-ID", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return "-";
-    }
-  };
-
-  let x = margin;
-  let y = 40;
-  let count = 0;
-
-  laporanData.forEach((item, i) => {
-    console.log(`🧾 Menambahkan kapal ke-${i + 1}:`, item.namaKapal);
-    doc.setFontSize(9);
-
-    const lines = [
-      ["NAME OF SHIP", item.namaKapal || "-"],
-      ["DERMAGA", item.terminal || "-"],
-      ["SPMK", item.spmk || "-"],
-      ["PPK", item.ppk || "-"],
-      ["AGENT / STEV", item.agentStevedore || "-"],
-      ["COMMODITY", item.jenisBarang || "-"],
-      ["ETB/ETD", `${formatTimestamp(item.etb)} / ${formatTimestamp(item.etd)}`],
-      ["FIRST LINE", formatTimestamp(item.firstLine)],
-      ["START D/L", formatTimestamp(item.startDL || item.firstDL)],
-      ["EQUIPMENT", item.equipment || "-"],
-      ["MANIFEST", item.jumlahMuatan || "-"],
-      ["DISCH / SHIFT", item.discShift || "-"],
-      ["PREVIOUS", item.realisasiBongkarMuat || "-"],
-      [
-        "BALANCE",
-        item.balance ||
-          (item.jumlahMuatan && item.realisasiBongkarMuat
-            ? (parseFloat(item.jumlahMuatan) -
-                parseFloat(item.realisasiBongkarMuat)).toFixed(3)
-            : "-"),
-      ],
-      ["NOT TIME", `${item.not_time_hours || 0} JAM`],
-      ["IDLE TIME", `${item.idle_time_hours || 0} JAM`],
-      ["EFFECTIVE TIME", `${item.effective_time_hours || 0} JAM`],
-      ["TGH", item.realisasiTgh || "-"],
-      ["KINERJA", item.ketercapaian || "-"],
-      ["NOTE", item.remark || "-"],
-    ];
-
-    // 🔹 Hitung posisi titik dua tetap
-    const colonX = x + 30; // posisi titik dua di kolom kanan tetap
-    const valueX = colonX + 4; // jarak antara ":" dan value
-
-    const linesCount = lines.length;
-    // Tambahkan ruang ekstra untuk margin garis dan spasi tambahan
-const extraHeight = 20; // ruang ekstra untuk garis dan jarak tambahan
-const boxHeight = Math.max(100, linesCount * 5 + extraHeight);
-
-    doc.rect(x, y, 90, boxHeight);
-
-    let textY = y + 8;
-
-    lines.forEach(([label, value]) => {
-      // Jika label adalah NOT TIME atau KINERJA, tambahkan garis dengan margin
-      if (label === "NOT TIME" || label === "KINERJA") {
-        textY += 0; // beri jarak sebelum garis
-        const lineY = textY;
-        doc.setLineWidth(0.3);
-        doc.line(x + 1, lineY, x + 89, lineY);
-        textY += 3; // beri jarak lagi di bawah garis
-      }
-
-      // Tulis teks setelah jarak yang sesuai
-      doc.text(label, x + 2, textY);
-      doc.text(":", colonX, textY);
-      doc.text(String(value), valueX, textY);
-      textY += 5;
-    });
-
-    x += 95;
-    count++;
-    if (count % 3 === 0) {
-      x = margin;
-      y += boxHeight + 5;
-    }
+const updateField = (index, field, value) => {
+  setKapalList((prev) => {
+    const updated = [...prev];
+    updated[index] = { ...updated[index], [field]: value };
+    return updated;
   });
-
-  doc.save(`Laporan_${terminal}_${tanggal}_${shift}.pdf`);
-  console.log("✅ PDF berhasil dibuat dan diunduh!");
 };
 
+  const formatTanggalHeader = (tanggal) => {
+    if (!tanggal) return "";
+    const date = new Date(tanggal);
+    return date.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  };
 
+  const terminalTitle = 
+    terminal.toLowerCase().includes("jamrud") 
+      ? "JAMRUD TERMINAL DIVISION"
+      : terminal.toLowerCase().includes("nilam")
+      ? "NILAM KONVENSIONAL TERMINAL DIVISION"
+      : terminal.toLowerCase().includes("mirah")
+      ? "MIRAH TERMINAL DIVISION"
+      : "";
 
   return (
     <PageWrapper>
@@ -239,7 +186,7 @@ const boxHeight = Math.max(100, linesCount * 5 + extraHeight);
           <FilterGrid>
             <div>
               <Label>Tanggal</Label>
-              <Input
+              <InputField
                 type="date"
                 value={tanggal}
                 onChange={(e) => setTanggal(e.target.value)}
@@ -269,52 +216,123 @@ const boxHeight = Math.max(100, linesCount * 5 + extraHeight);
                 <option value="III (00.00 - 08.00)">III (00.00 - 08.00)</option>
               </Select>
             </div>
+            <div>
+              <Label>Group</Label>
+              <Select
+                value={grup}
+                onChange={(e) => setGrup(e.target.value)}
+              >
+                <option value="">Pilih Group</option>
+                <option value="A">Group A</option>
+                <option value="B">Group B</option>
+                <option value="C">Group C</option>
+                <option value="D">Group D</option>
+              </Select>
+            </div>
           </FilterGrid>
-
-          <ButtonRow>
-            <Button primary onClick={handleCari} disabled={loading}>
-              {loading ? "Memuat..." : "Cari Laporan"}
-            </Button>
-            <Button
-              onClick={handleDownloadPDF}
-              disabled={laporanData.length === 0}
-            >
-              Download PDF
-            </Button>
-          </ButtonRow>
         </Card>
 
-        <ReportGrid>
-          {laporanData.length > 0 ? (
-            laporanData.map((item, i) => (
-              <ReportCard key={i}>
-                <h3>{item.namaKapal || "-"}</h3>
-                <p><b>DERMAGA:</b> {item.terminal}</p>
-                <p><b>SPMK:</b> {item.spmk}</p>
-                <p><b>PPK:</b> {item.ppk}</p>
-                <p><b>AGENT / STEV:</b> {item.agentStevedore}</p>
-                <p><b>COMMODITY:</b> {item.jenisBarang}</p>
-                <p>
-                  <b>ETB/ETD:</b>{" "}
-                  {item.etb?.seconds
-                    ? new Date(item.etb.seconds * 1000).toLocaleString("id-ID")
-                    : "-"}{" "}
-                  -{" "}
-                  {item.etd?.seconds
-                    ? new Date(item.etd.seconds * 1000).toLocaleString("id-ID")
-                    : "-"}
-                </p>
-                <p><b>FIRST LINE:</b> {item.firstLine}</p>
-                <p><b>START D/L:</b> {item.firstDL}</p>
-                <p><b>DAY:</b> {item.day}</p>
-                <p><b>KINERJA:</b> {item.ketercapaian}</p>
-                <p><b>NOTE:</b> {item.remark}</p>
-              </ReportCard>
-            ))
-          ) : (
-            !loading && <EmptyText>Belum ada data ditemukan.</EmptyText>
-          )}
-        </ReportGrid>
+      {tanggal && terminal && (
+        <HeaderSection>
+          <h2>{terminalTitle}</h2>
+          <h3>{formatTanggalHeader(tanggal)}</h3>
+          <h3>
+            Shift {shift} {grup ? `Group ${grup}` : ""}
+          </h3>
+        </HeaderSection>
+      )}
+
+      <GridContainer>
+        {kapalList.map((kapal, i) => (
+          <Box key={i}>
+            <Field>
+              <Label>Nama Kapal</Label>
+              <Input
+                contentEditable
+                suppressContentEditableWarning
+                onInput={(e) => updateField(i, "namaKapal", e.target.innerText)}
+              >
+                {kapal.namaKapal}
+              </Input>
+            </Field>
+
+            <Field>
+              <Label>SPMK</Label>
+              <Input
+                contentEditable
+                suppressContentEditableWarning
+                onInput={(e) => updateField(i, "spmk", e.target.innerText)}
+              >
+                {kapal.spmk}
+              </Input>
+            </Field>
+
+            <Field>
+              <Label>PPK</Label>
+              <Input
+                contentEditable
+                suppressContentEditableWarning
+                onInput={(e) => updateField(i, "ppk", e.target.innerText)}
+              >
+                {kapal.ppk}
+              </Input>
+            </Field>
+
+            <Field>
+              <Label>Jenis Barang</Label>
+              <Input
+                contentEditable
+                suppressContentEditableWarning
+                onInput={(e) =>
+                  updateField(i, "jenisBarang", e.target.innerText)
+                }
+              >
+                {kapal.jenisBarang}
+              </Input>
+            </Field>
+
+            <Field>
+              <Label>ETB</Label>
+              <Input
+                contentEditable
+                suppressContentEditableWarning
+                onInput={(e) => updateField(i, "etb", e.target.innerText)}
+              >
+                {kapal.etb}
+              </Input>
+            </Field>
+
+            <Field>
+              <Label>ETD</Label>
+              <Input
+                contentEditable
+                suppressContentEditableWarning
+                onInput={(e) => updateField(i, "etd", e.target.innerText)}
+              >
+                {kapal.etd}
+              </Input>
+            </Field>
+
+            <Field>
+              <Label>Remark</Label>
+              <Input
+                contentEditable
+                suppressContentEditableWarning
+                onInput={(e) => updateField(i, "remark", e.target.innerText)}
+              >
+                {kapal.remark}
+              </Input>
+            </Field>
+          </Box>
+        ))}
+      </GridContainer>
+
+      <ButtonWrapper>
+        <SaveButton onClick={handleSaveAndDownload} disabled={loading}>
+          {loading ? "Menyimpan..." : "Simpan & Download"}
+        </SaveButton>
+      </ButtonWrapper>
+
       </Content>
     </PageWrapper>
   );
@@ -327,6 +345,7 @@ const PageWrapper = styled.div`
   background: #f5f7fa;
   min-height: 100vh;
 `;
+
 const TopBar = styled.div`
   background: #1e3a8a;
   color: white;
@@ -335,6 +354,7 @@ const TopBar = styled.div`
   align-items: center;
   gap: 1rem;
 `;
+
 const MenuButton = styled.button`
   background: transparent;
   color: white;
@@ -342,28 +362,35 @@ const MenuButton = styled.button`
   border: none;
   cursor: pointer;
 `;
+
 const Title = styled.h1`
   font-size: 1.3rem;
   font-weight: bold;
 `;
+
 const Content = styled.div`
   padding: 2rem;
   max-width: 1200px;
   margin: 0 auto;
 `;
+
 const Card = styled.div`
   background: white;
   border-radius: 10px;
   padding: 1.5rem;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
   margin-bottom: 2rem;
+  position: relative;
+  z-index: 10;     /* ⬅️ ini membuat input bisa diklik lagi */
 `;
+
 const SectionTitle = styled.h2`
   font-size: 1.2rem;
   font-weight: bold;
   color: #1e3a8a;
   margin-bottom: 1rem;
 `;
+
 const FilterGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -373,82 +400,108 @@ const FilterGrid = styled.div`
   align-items: end; /* agar input sejajar rapi */
 `;
 
-const Label = styled.label`
-  font-weight: 600;
-  color: #333;
-`;
-const Input = styled.input`
-  width: 100%;
-  padding: 0.5rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-`;
 const Select = styled.select`
   width: 100%;
   padding: 0.5rem;
   border-radius: 6px;
   border: 1px solid #ccc;
 `;
-const ButtonRow = styled.div`
-  display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
+
+const GridContainer = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, auto);
+  gap: 0;                /* ❗ tanpa jarak antar grid */
+  width: 100%;
+  margin-top: 25px;
+  background: white;     /* ❗ full background grid putih */
 `;
-const Button = styled.button`
-  background: ${(p) => (p.primary ? "#2563eb" : "#16a34a")};
-  color: white;
-  padding: 0.6rem 1.2rem;
-  border: none;
-  border-radius: 8px;
+
+const Box = styled.div`
+  background: white;      /* ❗ box putih */
+  border: 1px solid #ccc; /* ❗ beri garis pemisah antar box */
+  padding: 12px;
+  border-radius: 0;       /* ❗ no rounded */
+  width: 100%;
+  box-sizing: border-box;
+`;
+
+const BoxTitle = styled.h4`
+  margin: 0 0 10px 0;
+  font-weight: bold;
+  text-align: center;
+`;
+
+const Field = styled.div`
+  display: flex;
+  margin-bottom: 6px;
+`;
+
+const Label = styled.div`
+  width: 120px;
   font-weight: 600;
-  cursor: pointer;
-  &:disabled {
-    background: #9ca3af;
-    cursor: not-allowed;
+`;
+const InputField = styled.input`
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+`;
+
+const Input = styled.div`
+  flex: 1;
+  min-height: 18px;
+  padding: 3px 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 4px;
+  outline: none;
+
+  &[contenteditable="true"]:focus {
+    border-color: #007bff;
+    background: #eef5ff;
   }
 `;
-const ReportGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 0.4rem; /* 🔹 semula 1.2rem → dipersempit */
-  align-items: start;
-`;
 
-const ReportCard = styled.div`
-  background: white;
-  border-radius: 8px;
-  padding: 1rem 1.2rem; /* 🔹 sedikit dipersempit juga */
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+const HeaderSection = styled.div`
+  text-align: center;
+  margin-bottom: 20px;
 
-  min-height: 550px;
-  height: auto;
-  box-sizing: border-box;
+  h2 {
+    font-size: 20px;
+    font-weight: bold;
+  }
 
   h3 {
-    color: #1e3a8a;
-    text-align: center;
-    margin-bottom: 0.5rem;
-    word-wrap: break-word;
-  }
-
-  p {
-    font-size: 0.9rem;
-    margin: 0.25rem 0;
-    word-wrap: break-word;
-  }
-
-  @media print {
-    min-height: auto;
-    box-shadow: none;
-    border: 1px solid #000;
-    page-break-inside: avoid;
+    font-size: 16px;
+    margin-top: 4px;
   }
 `;
 
+const ButtonWrapper = styled.div`
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 30px 0;
+`;
 
+const SaveButton = styled.button`
+  background: #003366;
+  color: white;
+  padding: 12px 26px;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.2s;
 
-const EmptyText = styled.p`
-  text-align: center;
-  color: #6b7280;
-  font-style: italic;
+  &:hover {
+    background: #002244;
+  }
+
+  &:disabled {
+    background: #999;
+    cursor: not-allowed;
+  }
 `;

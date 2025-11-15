@@ -9,23 +9,98 @@ import { FaBars, FaTimes } from "react-icons/fa";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 
-function toNumber(v) {
-  if (!v) return 0;
-  const cleaned = String(v).trim().replace(/\./g, "").replace(/,/g, ".").replace(/[^\d.-]/g, "");
-  const n = parseFloat(cleaned);
-  return Number.isFinite(n) ? n : 0;
+const toNumber = (val) => {
+  if (val === undefined || val === null || val === "") return 0;
+
+  let str = val.toString().trim();
+
+  // 1️⃣ Kalau format Indonesia/Eropa (misal "1.200,5")
+  if (str.match(/,\d{1,2}$/) && str.includes(".")) {
+    str = str.replace(/\./g, "").replace(",", ".");
+  }
+
+  // 2️⃣ Kalau format Inggris (misal "1,200.5")
+  else if (str.match(/\.\d{1,2}$/) && str.includes(",")) {
+    str = str.replace(/,/g, "");
+  }
+
+  // 3️⃣ Kalau format polos (misal "1200.5" atau "1000")
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+};
+
+// 🧩 Helper function: parsing "MM/DD/YYYY HH:mm:ss" jadi Date valid
+function parseCustomDate(str) {
+  if (!str) return new Date(0);
+  const s = String(str).trim();
+
+  // format "MM/DD/YYYY HH:mm:ss"
+  const match = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}):(\d{2}))?$/);
+  if (match) {
+    const [, month, day, year, hh = "0", mm = "0", ss = "0"] = match;
+    return new Date(year, month - 1, day, hh, mm, ss);
+  }
+
+  return new Date(s);
 }
 
-// Konversi format "04/11/2025 12:46:56" → "2025-11-04"
-function convertToISO(dateStr) {
-  if (!dateStr) return "";
-  const parts = dateStr.split(" ")[0]?.split("/");
-  if (parts.length === 3) {
-    const [dd, mm, yyyy] = parts;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-  }
-  return "";
+
+
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+  const rows = lines.map(line => {
+    const cells = [];
+    let cur = "";
+    let inQuotes = false;
+    for (let ch of line) {
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+        continue;
+      }
+      if (ch === "," && !inQuotes) {
+        cells.push(cur);
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    cells.push(cur);
+    return cells.map(c => c.trim());
+  });
+  return rows;
 }
+
+
+// Konversi format "04/11/2025 12:46:56" → "2025-11-04"
+function convertToISO(input) {
+  if (!input || typeof input !== "string") return "";
+
+  // Deteksi kalau formatnya sudah ISO (misalnya "2025-11-13")
+  if (input.includes("-")) {
+    return input.split("T")[0].trim();
+  }
+
+  // Format umum dari Google Sheet: "MM/DD/YYYY HH:mm:ss"
+  try {
+    const [month, day, rest] = input.split("/");
+    if (!month || !day || !rest) return "";
+
+    const [year, time] = rest.split(" ");
+    const dateStr = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")} ${time || "00:00:00"}`;
+
+    // Pastikan waktu tetap waktu lokal (hindari pergeseran UTC)
+    const localDate = new Date(dateStr);
+    if (isNaN(localDate)) return "";
+
+    const offsetMs = localDate.getTimezoneOffset() * 60000;
+    const localISO = new Date(localDate.getTime() - offsetMs).toISOString().split("T")[0];
+    return localISO;
+  } catch (err) {
+    console.warn("⚠️ convertToISO gagal parse:", input, err);
+    return "";
+  }
+}
+
 
 const downloadPDF = async () => {
   const downloadButton = document.getElementById("download-btn");
@@ -35,6 +110,7 @@ const downloadPDF = async () => {
   const endDateInput = document.getElementById("end-date");
   const startDate = startDateInput?.value || "";
   const endDate = endDateInput?.value || "";
+  
 
   let fileName = "Evaluasi_Harian_Capaian_Kinerja";
   if (startDate && endDate) {
@@ -67,11 +143,9 @@ const downloadPDF = async () => {
   let heightLeft = imgHeight;
   let position = 0;
 
-  // Tambahkan halaman pertama
   pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
   heightLeft -= pageHeight;
 
-  // Tambahkan halaman berikutnya jika tinggi melebihi 1 halaman
   while (heightLeft > 0) {
     position = heightLeft - imgHeight;
     pdf.addPage();
@@ -87,7 +161,6 @@ const downloadPDF = async () => {
 export default function Dashboard() {
   const today = new Date().toISOString().split("T")[0];
   const [rawData, setRawData] = useState([]);
-  const [data, setData] = useState([]);
   const [summary, setSummary] = useState({ delay: 0, onSchedule: 0 });
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
@@ -96,73 +169,125 @@ export default function Dashboard() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showTerminalDropdown, setShowTerminalDropdown] = useState(false);
-
+const formatNumber = (num) => {
+    if (num == null || isNaN(num)) return "-";
+    return Number.isInteger(num)
+      ? num.toLocaleString()
+      : num.toLocaleString(undefined, {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 2,
+        });
+  };
   useEffect(() => {
   const fetchData = async () => {
-    console.log("📡 Mulai ambil data dari Firestore...");
+    console.log("📡 Mulai ambil data dari Firestore dan Google Sheet...");
 
     try {
+      // --- 1️⃣ Ambil dari Firestore ---
       const querySnapshot = await getDocs(collection(db, "laporan"));
-      console.log(`✅ Jumlah dokumen ditemukan: ${querySnapshot.size}`);
+      const firestoreData = querySnapshot.docs.map((doc) => {
+        const d = doc.data();
 
-      const docs = querySnapshot.docs.map((doc) => {
-  const d = doc.data();
-  console.log(`📄 Dokumen ID: ${doc.id}`, d);
+        // Ambil tanggal dari Timestamp Firestore
+        let tanggal = "";
+        if (d.createdAt && d.createdAt.toDate) {
+          const dateObj = d.createdAt.toDate();
+          tanggal = dateObj.toLocaleDateString("en-CA");
+        }
 
-  // ✅ Gunakan tanggal dari Firestore Timestamp
-  let tanggal = "";
-    if (d.createdAt && d.createdAt.toDate) {
-      const t = d.createdAt.toDate();
-      tanggal = t.toLocaleDateString("en-CA"); // hasil: "2023-11-26"
-    }
+        const jumlahMuatan = toNumber(d.jumlahMuatan);
+        const realisasiBongkarMuat = toNumber(d.realisasiBongkarMuat);
+        const perencanaanShift = toNumber(d.perencanaanShift);
+        const realisasiShift = toNumber(d.realisasiShift);
 
-  const terminal = d.terminal || "";
-  const shift = d.shift || "";
-  const namaKapal = d.namaKapal || "";
-  const realisasiTgh = d.realisasiTgh || "";
-  const ketercapaian = d.ketercapaian || "";
-  const jumlahMuatan = toNumber(d.jumlahMuatan);
-  const realisasiBongkarMuat = toNumber(d.realisasiBongkarMuat);
-  const perencanaanShift = toNumber(d.perencanaanShift);
-  const realisasiShift = toNumber(d.realisasiShift);
-  const tambatan = d.tambatan || "";
-  const remark = d.remark || d.keterangan || "";
-  const targetPerShift = perencanaanShift ? jumlahMuatan / perencanaanShift : 0;
-  const totalTarget = targetPerShift * realisasiShift;
-  const status = realisasiBongkarMuat >= totalTarget ? "ON SCHEDULE" : "DELAY";
-  const balance = jumlahMuatan - realisasiBongkarMuat;
-  const lampiran = d.lampiran || [];
+        const targetPerShift = perencanaanShift ? jumlahMuatan / perencanaanShift : 0;
+        const totalTarget = targetPerShift * realisasiShift;
+        const status = realisasiBongkarMuat >= totalTarget ? "ON SCHEDULE" : "DELAY";
+        const balance = jumlahMuatan - realisasiBongkarMuat;
 
-  return {
-    tanggal,
-    terminal,
-    shift,
-    namaKapal,
-    realisasiTgh,
-    ketercapaian,
-    jumlahMuatan,
-    realisasiBongkarMuat,
-    perencanaanShift,
-    realisasiShift,
-    balance,
-    tambatan,
-    status,
-    keterangan: remark,
-    lampiran,
-  };
-});
+        return {
+          sumber: "firestore",
+          tanggal,
+          terminal: d.terminal || "",
+          shift: d.shift || "",
+          namaKapal: d.namaKapal || "",
+          realisasiTgh: d.realisasiTgh || "",
+          ketercapaian: d.ketercapaian || "",
+          jumlahMuatan,
+          realisasiBongkarMuat,
+          perencanaanShift,
+          realisasiShift,
+          balance,
+          tambatan: d.tambatan || "",
+          keterangan: d.remark || d.keterangan || "",
+          status,
+          lampiran: d.lampiran || [],
+        };
+      }).filter(r => r.namaKapal);
 
-      const parsed = docs.filter((r) => r.namaKapal);
-      console.log("📊 Data hasil parsing:", parsed);
+      console.log(`✅ Firestore: ${firestoreData.length} data diambil.`);
 
-      setRawData(parsed);
-      console.log("✅ rawData diset:", parsed.length, "item");
+      // --- 2️⃣ Ambil dari Google Sheet ---
+      const sheetUrl = "https://docs.google.com/spreadsheets/d/1NKzce5mlBRcIvHuI4UXzaOIStmWmx4Wzdu4pWzf-a78/gviz/tq?tqx=out:csv";
+      const res = await fetch(sheetUrl);
+      const text = await res.text();
+      const rows = parseCSV(text);
+      let sheetData = [];
 
-      setData(parsed);
-      updateSummary(parsed);
-      
+      if (rows.length > 1) {
+        sheetData = rows.slice(1).map(r => {
+          const tanggal = convertToISO(r[0]);
+          const timestamp = r[0];   
+          const terminal = r[1] || "";
+          const shift = r[3] || "";
+          const namaKapal = r[4] || "";
+          const remark = r[9] || "";
+          const jumlahMuatan = toNumber(r[13]);
+          const realisasiBongkar = toNumber(r[14]);
+          const perencanaanShift = toNumber(r[15]);
+          const realisasiShift = toNumber(r[16]);
+          const etbetd = r[18] || "";
+
+          const targetPerShift = perencanaanShift ? jumlahMuatan / perencanaanShift : 0;
+          const totalTarget = targetPerShift * realisasiShift;
+          const status = realisasiBongkar >= totalTarget ? "ON SCHEDULE" : "DELAY";
+          const balance = jumlahMuatan - realisasiBongkar;
+
+          return {
+            sumber: "sheet",
+            tanggal,
+            timestamp,
+            terminal,
+            shift,
+            namaKapal,
+            realisasiTgh: r[7] || "",
+            ketercapaian: r[8] || "",
+            jumlahMuatan,
+            realisasiBongkarMuat: realisasiBongkar,
+            perencanaanShift,
+            realisasiShift,
+            balance,
+            tambatan: r[17] || "",
+            keterangan: remark,
+            status,
+            lampiran: r[10] ? [r[10]] : [],
+            etbetd,
+          };
+        }).filter(r => r.namaKapal);
+      }
+
+      console.log(`✅ Google Sheet: ${sheetData.length} data diambil.`);
+
+      // --- 3️⃣ Gabungkan kedua sumber data ---
+      const combined = [...firestoreData, ...sheetData];
+      console.log(`📊 Total data gabungan: ${combined.length}`);
+
+      setRawData(combined);
+      setSummary(summary);
+
+
     } catch (error) {
-      console.error("❌ Gagal mengambil data Firestore:", error);
+      console.error("❌ Gagal mengambil data:", error);
     }
   };
 
@@ -176,10 +301,10 @@ export default function Dashboard() {
         setSummary({ delay, onSchedule });
     };
 
-    useEffect(() => {
+    const filteredData = useMemo(() => {
       let filtered = [...rawData];
 
-      // ✅ Filter berdasarkan rentang tanggal
+      // Filter tanggal
       if (startDate && endDate) {
         filtered = filtered.filter(r => {
           const tgl = new Date(r.tanggal);
@@ -187,30 +312,52 @@ export default function Dashboard() {
         });
       }
 
+      // Filter shift
       if (selectedShift) filtered = filtered.filter(r => r.shift.includes(selectedShift));
+
+      // Filter terminal
       if (selectedTerminals.length > 0) {
-        filtered = filtered.filter((r) =>
-          selectedTerminals.includes(r.terminal)
-        );
+        filtered = filtered.filter(r => selectedTerminals.includes(r.terminal));
       }
 
+      // Sort (kalau user klik header tabel)
+      if (sortConfig.key) {
+        const { key, direction } = sortConfig;
+        filtered = filtered.sort((a, b) => {
+          if (a[key] < b[key]) return direction === "asc" ? -1 : 1;
+          if (a[key] > b[key]) return direction === "asc" ? 1 : -1;
+          return 0;
+        });
+      }
 
-      updateSummary(filtered);
-      setData(filtered);
-    }, [startDate, endDate, selectedShift, selectedTerminals, rawData]);
+      return filtered;
+    }, [rawData, startDate, endDate, selectedShift, selectedTerminals, sortConfig]);
 
+    useEffect(() => {
+  console.log("🟩 RawData:", rawData.map(d => d.tanggal));
+  console.log("🟦 startDate:", startDate, "endDate:", endDate);
+  console.log("🟨 FilteredData:", filteredData.map(d => d.tanggal));
+}, [rawData, filteredData, startDate, endDate]);
+
+
+useEffect(() => {
+  if (!filteredData || filteredData.length === 0) {
+    setSummary({ delay: 0, onSchedule: 0 });
+    return;
+  }
+
+  const updatedSummary = {
+    delay: filteredData.filter(d => d.status === "DELAY").length,
+    onSchedule: filteredData.filter(d => d.status === "ON SCHEDULE").length,
+  };
+
+  setSummary(updatedSummary);
+}, [filteredData]);
 
     const handleSort = (key) => {
-        let direction = "asc";
-        if (sortConfig.key === key && sortConfig.direction === "asc") direction = "desc";
-        setSortConfig({ key, direction });
-
-        const sorted = [...data].sort((a, b) => {
-        if (a[key] < b[key]) return direction === "asc" ? -1 : 1;
-        if (a[key] > b[key]) return direction === "asc" ? 1 : -1;
-        return 0;
-        });
-        setData(sorted);
+      let direction = "asc";
+      if (sortConfig.key === key && sortConfig.direction === "asc") direction = "desc";
+      setSortConfig({ key, direction });
     };
 
   const pieData = [
@@ -308,6 +455,7 @@ export default function Dashboard() {
         "Nilam Utara",
         "Mirah Selatan",
         "Mirah Timur",
+        "Surabaya Veem"
       ].map((terminal) => (
         <label
           key={terminal}
@@ -397,7 +545,7 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {data.map((row, i) => (
+            {filteredData.map((row, i) => (
               <tr key={i}>
                 <td>{row.tanggal}</td>
                 <td>{row.terminal}</td>
@@ -405,8 +553,8 @@ export default function Dashboard() {
                 <td>{row.namaKapal}</td>
                 <td>{row.realisasiTgh}</td>
                 <td>{row.ketercapaian}</td>
-                <td>{row.jumlahMuatan}</td>
-                <td>{row.realisasiBongkarMuat}</td>
+                <td>{formatNumber(row.jumlahMuatan)}</td>
+                <td>{formatNumber(row.realisasiBongkarMuat)}</td>
                 <td>{row.perencanaanShift}</td>
                 <td>{row.realisasiShift}</td>
                 <td>{row.balance ? row.balance.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "-"}</td>
@@ -460,18 +608,28 @@ export default function Dashboard() {
 
     {(
       selectedTerminals.length === 0 ||
-      selectedTerminals.some(t => t.startsWith("Jamrud"))
-    ) && <QuayLayout data={data.filter(d => d.terminal.startsWith("Jamrud"))} />}
+      selectedTerminals.some(t =>
+        t.startsWith("Jamrud") || t === "Surabaya Veem"
+      )
+    ) && (
+      <QuayLayout
+        data={filteredData.filter(
+          d =>
+            d.terminal.startsWith("Jamrud") ||
+            d.terminal === "Surabaya Veem"
+        )}
+      />
+    )}
 
     {(
       selectedTerminals.length === 0 ||
       selectedTerminals.some(t => t.startsWith("Nilam"))
-    ) && <NilamLayout data={data.filter(d => d.terminal.startsWith("Nilam"))} />}
+    ) && <NilamLayout data={filteredData.filter(d => d.terminal.startsWith("Nilam"))} />}
 
     {(
       selectedTerminals.length === 0 ||
       selectedTerminals.some(t => t.startsWith("Mirah"))
-    ) && <MirahLayout data={data.filter(d => d.terminal.startsWith("Mirah"))} />}
+    ) && <MirahLayout data={filteredData.filter(d => d.terminal.startsWith("Mirah"))} />}
 
     {/* 🔹 Tabel baru di bawah layout */}
     <div style={{ marginTop: "40px" }}>
@@ -486,7 +644,7 @@ export default function Dashboard() {
           </tr>
         </thead>
         <tbody>
-          {data.map((row, i) => (
+          {filteredData.map((row, i) => (
             <tr key={i}>
               <td style={{ fontWeight: 500 }}>{row.namaKapal}</td>
               <StatusCell status={row.status}>{row.status}</StatusCell>
@@ -581,44 +739,119 @@ const QuayLayout = ({ data = [] }) => {
     { id: 8, posisi: "bottom", nama: "N/A" },
     { id: 9, posisi: "bottom", nama: "N/A" },
     { id: 10, posisi: "bottom", nama: "N/A" },
+    { id: 11, posisi: "right", nama: "N/A" },
   ];
 
-  const updatedTambatan = useMemo(() => {
-    return tambatan.map((t) => {
-      const match = data.find((d) => {
-        const berth = (d.tambatan || "").trim().toLowerCase();
-        const terminal = (d.terminal || "").toLowerCase();
+const updatedTambatan = useMemo(() => {
+  function parseCustomDate(d) {
+    if (!d) return new Date(0);
+    if (d instanceof Date) return d;
 
-        const cocokTerminal =
-          terminal.includes("jamrud") &&
-          (
-            (terminal.includes("utara") && t.posisi === "top") ||
-            (terminal.includes("selatan") && t.posisi === "bottom") ||
-            (terminal.includes("barat") && t.posisi === "left")
-          );
+    // Coba gabungkan tanggal dan jam jika terpisah
+    if (typeof d === "object") {
+      const tanggal = d.tanggal || d.date || "";
+      const jam = d.jam || d.time || "";
+      return parseCustomDate(`${tanggal} ${jam}`);
+    }
 
-        // 🔹 Logika tambatan
-        const cocokTambatan = berth.includes(t.id.toString());
+    // Normalisasi string
+    const str = String(d).trim();
 
-        const cocok = cocokTerminal && cocokTambatan;
+    // 🔹 ISO format (2025-11-13T15:49:16Z)
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}/.test(str)) return new Date(str);
 
-        if (cocok) {
-          console.log(`✅ ${d.namaKapal} cocok dengan t.id=${t.id}, terminal=${terminal}, posisi=${t.posisi}`);
-        }
+    // 🔹 YYYY-MM-DD HH:mm:ss
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+      const [datePart, timePart = "00:00:00"] = str.split(" ");
+      const [y, m, d2] = datePart.split("-").map(Number);
+      const [hh, mm, ss] = timePart.split(":").map(Number);
+      return new Date(y, m - 1, d2, hh, mm, ss);
+    }
 
-        return cocok;
-      });
+    // 🔹 MM/DD/YYYY HH:mm:ss
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(str)) {
+      const [datePart, timePart = "00:00:00"] = str.split(" ");
+      const [month, day, year] = datePart.split("/").map(Number);
+      const [hh, mm, ss] = timePart.split(":").map(Number);
+      return new Date(year, month - 1, day, hh, mm, ss);
+    }
 
-      return {
-        ...t,
-        nama: match ? match.namaKapal : "N/A",
-        jumlahMuatan: match ? match.jumlahMuatan : null,
-        perencanaanShift: match ? match.perencanaanShift : null,
-        balance: match ? match.balance : null,
-        status: match ? match.status : null,
-      };
+    // 🔹 DD/MM/YYYY HH:mm:ss
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(str)) {
+      const [datePart, timePart = "00:00:00"] = str.split(" ");
+      const [day, month, year] = datePart.split("/").map(Number);
+      const [hh, mm, ss] = timePart.split(":").map(Number);
+      return new Date(year, month - 1, day, hh, mm, ss);
+    }
+
+    return new Date(0);
+  }
+
+  return tambatan.map((t) => {
+    const matches = data.filter((d) => {
+      const berth = (d.tambatan || "").toLowerCase();
+      const terminal = (d.terminal || "").toLowerCase();
+
+      const cocokTerminal =
+      (
+        terminal.includes("jamrud") &&
+        (
+          (terminal.includes("utara") && t.posisi === "top") ||
+          (terminal.includes("selatan") && t.posisi === "bottom") ||
+          (terminal.includes("barat") && t.posisi === "left")
+        )
+      )
+      ||
+      (
+        terminal === "surabaya veem" &&
+        t.posisi === "right"
+      );
+
+
+      const cocokTambatan = berth.includes(t.id.toString());
+      return cocokTerminal && cocokTambatan;
     });
-  }, [data]);
+
+    if (matches.length > 0) {
+      console.group(`🟦 Tambatan ${t.id} (${t.posisi})`);
+      console.table(
+        matches.map((m) => ({
+          kapal: m.namaKapal,
+          terminal: m.terminal,
+          tambatan: m.tambatan,
+          tanggal: m.tanggal,
+          jam: m.jam,
+          createdAt: m.createdAt,
+          parsed: parseCustomDate(m.tanggal || m.createdAt),
+        }))
+      );
+    }
+
+    const latest = matches.reduce((latestSoFar, curr) => {
+      if (!latestSoFar) return curr;
+
+      const dateA = parseCustomDate(latestSoFar.timestamp || latestSoFar.tanggal);
+      const dateB = parseCustomDate(curr.timestamp || curr.tanggal);
+
+      return dateB > dateA ? curr : latestSoFar;
+    }, null);
+
+    if (latest) {
+      console.log(`✅ Dipilih: ${latest.namaKapal} (${latest.tanggal})`);
+      console.groupEnd();
+    }
+
+    return {
+      ...t,
+      nama: latest ? latest.namaKapal : "N/A",
+      jumlahMuatan: latest ? latest.jumlahMuatan : null,
+      perencanaanShift: latest ? latest.perencanaanShift : null,
+      balance: latest ? latest.balance : null,
+      status: latest ? latest.status : null,
+      etbetd: latest ? latest.etbetd : null,
+    };
+  });
+}, [data]);
 
 
   return (
@@ -635,6 +868,7 @@ const QuayLayout = ({ data = [] }) => {
                   <Ship>
                     <ShipInfoOverlay status={t.status}>
                       <div><strong>{t.nama}</strong></div>
+                      {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
                       {t.jumlahMuatan && <div>Jumlah Muatan: {t.jumlahMuatan.toLocaleString()}</div>}
                       {t.perencanaanShift && <div>Jumlah Perencanaan Shift: {t.perencanaanShift}</div>}
                       {t.balance != null && <div>Balance: {t.balance.toLocaleString()}</div>}
@@ -649,13 +883,13 @@ const QuayLayout = ({ data = [] }) => {
 
           {/* Dock */}
           <Dock>
-            <DockLabel style={{ top: "75px", left: "50%", transform: "translateX(-50%)" }}>
+            <DockLabel style={{ top: "105px", left: "50%", transform: "translateX(-50%)" }}>
               NORTH JAMRUD QUAY
             </DockLabel>
-            <DockLabel style={{ bottom: "75px", left: "50%", transform: "translateX(-50%)" }}>
+            <DockLabel style={{ bottom: "335px", left: "50%", transform: "translateX(-50%)" }}>
               SOUTH JAMRUD QUAY
             </DockLabel>
-            <DockLabel style={{ top: "50%", left: "20px", transform: "translateY(-50%) rotate(-90deg)" }}>
+            <DockLabel style={{ top: "29%", left: "30px", transform: "translateY(-50%) rotate(-90deg)" }}>
               WEST JAMRUD QUAY
             </DockLabel>
 
@@ -668,6 +902,7 @@ const QuayLayout = ({ data = [] }) => {
                     <ShipVertical>
                       <ShipInfoOverlay status={t.status}>
                         <div><strong>{t.nama}</strong></div>
+                        {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
                         {t.jumlahMuatan && <div>Jumlah Muatan: {t.jumlahMuatan.toLocaleString()}</div>}
                         {t.perencanaanShift && <div>Jumlah Perencanaan Shift: {t.perencanaanShift}</div>}
                         {t.balance != null && <div>Balance: {t.balance.toLocaleString()}</div>}
@@ -680,6 +915,38 @@ const QuayLayout = ({ data = [] }) => {
             </ShipSide>
           </Dock>
 
+          {/* Right Ship (vertical below bottom row) */}
+          <div style={{ 
+            position: "absolute",
+            right: "115px",       // geser ke kanan
+            bottom: "-85px",       // sedikit naik dari bawah dock
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center"
+          }}>
+            {updatedTambatan
+              .filter((t) => t.posisi === "right")
+              .map((t, index) => (
+                <ShipWrapperLeft key={t.id}>
+                  <ShipVertical>
+                    <ShipInfoOverlay status={t.status}>
+                      <div><strong>{t.nama}</strong></div>
+                      {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
+                      {t.jumlahMuatan && <div>Jumlah Muatan: {t.jumlahMuatan.toLocaleString()}</div>}
+                      {t.perencanaanShift && <div>Jumlah Perencanaan Shift: {t.perencanaanShift}</div>}
+                      {t.balance != null && <div>Balance: {t.balance.toLocaleString()}</div>}
+                      {t.status && <div>Status: {t.status}</div>}
+                    </ShipInfoOverlay>
+                  </ShipVertical>
+
+                  {/* ⬇️ Gunakan BerthLabelLeft seperti left-side ships */}
+                  <BerthLabelLeft>
+                    Berth {11 + index}
+                  </BerthLabelLeft>
+                </ShipWrapperLeft>
+              ))}
+          </div>
+
           {/* Bottom Ships */}
           <ShipRow position="bottom">
             {updatedTambatan
@@ -690,6 +957,7 @@ const QuayLayout = ({ data = [] }) => {
                   <Ship>
                     <ShipInfoOverlay status={t.status}>
                       <div><strong>{t.nama}</strong></div>
+                      {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
                       {t.jumlahMuatan && <div>Jumlah Muatan: {t.jumlahMuatan.toLocaleString()}</div>}
                       {t.perencanaanShift && <div>Jumlah Perencanaan Shift: {t.perencanaanShift}</div>}
                       {t.balance != null && <div>Balance: {t.balance.toLocaleString()}</div>}
@@ -763,6 +1031,7 @@ const NilamLayout = ({ data = [], selectedTerminals = [] }) => {
                   <ShipNilam>
                     <ShipInfoOverlayNilam status={t.status}>
                       <div><strong>{t.nama}</strong></div>
+                      {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
                       {t.jumlahMuatan && <div>Jumlah Muatan: {t.jumlahMuatan.toLocaleString()}</div>}
                       {t.perencanaanShift && <div>Jumlah Perencanaan Shift: {t.perencanaanShift}</div>}
                       {t.balance != null && <div>Balance: {t.balance.toLocaleString()}</div>}
@@ -783,6 +1052,7 @@ const NilamLayout = ({ data = [], selectedTerminals = [] }) => {
                   <ShipNilam>
                     <ShipInfoOverlayNilam status={t.status}>
                       <div><strong>{t.nama}</strong></div>
+                      {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
                       {t.jumlahMuatan && <div>Jumlah Muatan: {t.jumlahMuatan.toLocaleString()}</div>}
                       {t.perencanaanShift && <div>Jumlah Perencanaan Shift: {t.perencanaanShift}</div>}
                       {t.balance != null && <div>Balance: {t.balance.toLocaleString()}</div>}
@@ -875,6 +1145,7 @@ const MirahLayout = ({ data = [], selectedTerminals = [] }) => {
                     <ShipMirah>
                       <ShipInfoOverlayMirah status={t.status}>
                         <div><strong>{t.nama}</strong></div>
+                        {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
                         {t.jumlahMuatan && <div>Jumlah Muatan: {t.jumlahMuatan.toLocaleString()}</div>}
                         {t.perencanaanShift && <div>Perencanaan Shift: {t.perencanaanShift}</div>}
                         {t.balance != null && <div>Balance: {t.balance.toLocaleString()}</div>}
@@ -925,6 +1196,7 @@ const MirahLayout = ({ data = [], selectedTerminals = [] }) => {
                       <ShipVerticalMirah>
                         <ShipInfoOverlayMirah status={t.status}>
                           <div><strong>{t.nama}</strong></div>
+                          {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
                           {t.jumlahMuatan && <div>Jumlah Muatan: {t.jumlahMuatan.toLocaleString()}</div>}
                           {t.perencanaanShift && <div>Perencanaan Shift: {t.perencanaanShift}</div>}
                           {t.balance != null && <div>Balance: {t.balance.toLocaleString()}</div>}
@@ -1033,11 +1305,11 @@ const StyledTable = styled.table`
   border-collapse: collapse;
   color: #1a1a1a;
   border: 1px solid #ccc;
-  font-size: 13px;
+  font-size: 11.5px; /* 🔹 lebih kecil dari 13px */
 
   th, td {
     border: 1px solid #ccc;
-    padding: 6px 8px;
+    padding: 4px 6px; /* 🔹 sedikit lebih rapat */
     text-align: center;
     cursor: pointer;
   }
@@ -1045,7 +1317,7 @@ const StyledTable = styled.table`
   thead {
     background-color: #002b5b;
     color: white;
-    font-size: 13px;
+    font-size: 12px; /* 🔹 tetap sedikit lebih besar untuk header */
   }
 
   tbody tr:nth-child(even) {
@@ -1056,6 +1328,7 @@ const StyledTable = styled.table`
     background-color: #e5eef7;
   }
 `;
+
 
 /* ✅ Tabel khusus untuk bagian "Keterangan" di bawah layout */
 const KeteranganTable = styled(StyledTable)`
@@ -1087,7 +1360,6 @@ const StatusCell = styled.td`
   border-radius: 6px;
 `;
 
-/* Styled Components untuk layout dermaga */
 const QuayContainer = styled.div`
   margin-top: 50px;
   padding: 30px;
@@ -1098,7 +1370,10 @@ const QuayContainer = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
+
+  min-height: 500px; /* ⬅️ tambahkan ini */
 `;
+
 
 const DockWrapper = styled.div`
   position: relative;
@@ -1111,16 +1386,20 @@ const ShipRow = styled.div`
   display: flex;
   justify-content: center;
   gap: 30px;
-  margin: ${({ position }) =>
-    position === "top" ? "0 0 -90px 0" : "-55px 0 0 0"}; /* ⬅️ ubah di sini */
-  
+
+  margin: ${({ position }) => {
+    if (position === "top") return "0 0 -130px 0";   // ⭐ tetap seperti aslinya
+    if (position === "bottom") return "-315px 0 0 0"; // ⭐ styling khusus bottom
+    return "0";
+  }};
+
   flex-direction: ${({ position }) =>
     position === "top" ? "row-reverse" : "row"};
 `;
 
 const Ship = styled.div`
-  width: 140px;
-  height: 105px;
+  width: 120px;
+  height: 95px;
   background-image: url("/images/kapal-side.png");
   background-size: contain;
   background-repeat: no-repeat;
@@ -1143,8 +1422,8 @@ const Ship = styled.div`
 
 const ShipSide = styled.div`
   position: absolute;
-  left: -175px; /* 🔹 dari -130 ke -45 biar lebih dekat */
-  top: 50%;
+  left: -155px; /* 🔹 dari -130 ke -45 biar lebih dekat */
+  top: 30%;
   transform: translateY(-50%);
   display: flex;
   flex-direction: column;
@@ -1152,8 +1431,8 @@ const ShipSide = styled.div`
 `;
 
 const ShipVertical = styled.div`
-  width: 140px;
-  height: 105px;
+  width: 120px;
+  height: 95px;
   background-image: url("/images/kapal-side.png");
   background-size: contain;
   background-repeat: no-repeat;
@@ -1176,8 +1455,8 @@ const ShipVertical = styled.div`
 `;
 
 const Dock = styled.div`
-  width: 830px;
-  height: 250px;
+  width: 900px;
+  height: 550px;
   position: relative;
   margin: 40px 0;
   border: none;
@@ -1188,7 +1467,7 @@ const Dock = styled.div`
   &::before {
     content: "";
     position: absolute;
-    top: 50%;
+    top: 53%;
     left: 50%;
     width: 100%;            /* 🔹 atur ukuran gambar lebih kecil */
     height: 90%;
@@ -1283,7 +1562,7 @@ const BerthLabelLeft = styled.div`
   position: absolute;
   left: 140px; /* geser mendekati kapal */
   top: 50%;
-  transform: translateY(-50%) rotate(-90deg);
+  transform: translateY(-50%) rotate(90deg);
   transform-origin: center;
   white-space: nowrap;
 `;
@@ -1311,7 +1590,7 @@ const ShipInfoOverlay = styled.div`
   width: 100%;
   text-align: center;
   color: #ffffff;
-  font-size: 9px; /* 🔹 ukuran default untuk teks lain */
+  font-size: 8px; /* 🔹 ukuran default untuk teks lain */
   line-height: 1.4;
   font-weight: 600;
   text-shadow: 0 0 3px rgba(0, 43, 91, 0.8);
@@ -1328,7 +1607,7 @@ const ShipInfoOverlay = styled.div`
   /* 🔹 Hanya nama kapal (elemen <strong>) yang diperbesar dan diberi outline */
   strong {
     display: block;
-    font-size: 10px; /* ⬆️ diperbesar dari 9px → 13px */
+    font-size: 8.5px; /* ⬆️ diperbesar dari 9px → 13px */
     font-weight: 800;
     text-shadow:
       -1px -1px 0 #001f3f,
@@ -1684,4 +1963,3 @@ const MenuButton = styled.button`
   font-size: 22px;
   cursor: pointer;
 `;
-

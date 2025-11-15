@@ -10,7 +10,7 @@ function App() {
       <Route path="/input" element={<Input />} />  {/* ✅ Input Data */}
       <Route path="/dashboard" element={<Dashboard />} />  {/* ✅ Dashboard */}
       <Route path="/laporan" element={<Laporan />} />  {/* ✅ Halaman Laporan */}
-      <Route path="*" element={<Input />} />  {/* ✅ Default ke Input */}
+      <Route path="*" element={<Dashboard />} />  {/* ✅ Default ke Input */}
     </Routes>
   );
 }
