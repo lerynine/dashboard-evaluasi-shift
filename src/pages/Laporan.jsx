@@ -26,129 +26,129 @@ const Laporan = () => {
   };
 
   const [kapalList, setKapalList] = useState(Array(6).fill(emptyKapal));
-const handleSaveAndDownload = async () => {
-  if (!tanggal || !terminal || !shift) {
-    alert("Mohon lengkapi Tanggal, Terminal, dan Shift");
-    return;
-  }
 
-  try {
-    setLoading(true);
+  const handleSaveAndDownload = async () => {
+    if (!tanggal || !terminal || !shift) {
+      alert("Mohon lengkapi Tanggal, Terminal, dan Shift");
+      return;
+    }
 
-    const payload = {
-      tanggal,
-      terminal,
-      shift,
-      grup: grup || "-",
-      kapalList,
-      createdAt: new Date(),
-    };
+    try {
+      setLoading(true);
 
-    // 🔹 Simpan ke Firestore
-    await addDoc(collection(db, "laporan"), payload);
+      const payload = {
+        tanggal,
+        terminal,
+        shift,
+        grup: grup || "-",
+        kapalList,
+        createdAt: new Date(),
+      };
 
-    // ======================================================
-    // 🔹 Generate PDF langsung tanpa memanggil fungsi lain
-    // ======================================================
-    const doc = new jsPDF();
+      // 🔹 Simpan ke Firestore
+      await addDoc(collection(db, "laporan"), payload);
 
-    // ---------- HEADER ----------
-    const terminalTitle =
-      terminal.toLowerCase().includes("jamrud")
-        ? "JAMRUD TERMINAL DIVISION"
-        : terminal.toLowerCase().includes("nilam")
-        ? "NILAM KONVENSIONAL TERMINAL DIVISION"
-        : terminal.toLowerCase().includes("mirah")
-        ? "MIRAH TERMINAL DIVISION"
-        : "";
+      // ======================================================
+      // 🔹 Generate PDF langsung tanpa memanggil fungsi lain
+      // ======================================================
+      const doc = new jsPDF();
 
-    const formattedDate = new Date(tanggal).toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+      // ---------- HEADER ----------
+      const terminalTitle =
+        terminal.toLowerCase().includes("jamrud")
+          ? "JAMRUD TERMINAL DIVISION"
+          : terminal.toLowerCase().includes("nilam")
+          ? "NILAM KONVENSIONAL TERMINAL DIVISION"
+          : terminal.toLowerCase().includes("mirah")
+          ? "MIRAH TERMINAL DIVISION"
+          : "";
 
-    doc.setFontSize(14);
-    doc.text(terminalTitle, 105, 15, { align: "center" });
+      const formattedDate = new Date(tanggal).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
 
-    doc.setFontSize(12);
-    doc.text(formattedDate, 105, 22, { align: "center" });
+      doc.setFontSize(14);
+      doc.text(terminalTitle, 105, 15, { align: "center" });
 
-    doc.text(`Shift ${shift} ${grup ? `Group ${grup}` : ""}`, 105, 29, {
-      align: "center",
-    });
+      doc.setFontSize(12);
+      doc.text(formattedDate, 105, 22, { align: "center" });
 
-    doc.line(15, 33, 195, 33);
-
-    // ---------- GRID 6 BOX ----------
-    let x = 15;
-    let y = 40;
-    const boxWidth = 60;
-    const boxHeight = 45;
-
-    kapalList.forEach((kapal, index) => {
-      // Garis kotak
-      doc.rect(x, y, boxWidth, boxHeight);
-
-      // Judul di dalam kotak
-      doc.setFontSize(11);
-      doc.text(`KAPAL ${index + 1}`, x + boxWidth / 2, y + 6, {
+      doc.text(`Shift ${shift} ${grup ? `Group ${grup}` : ""}`, 105, 29, {
         align: "center",
       });
 
-      // Isi tabel
-      doc.setFontSize(9);
+      doc.line(15, 33, 195, 33);
 
-      const fields = [
-        ["Nama Kapal", kapal.namaKapal || "-"],
-        ["SPMK", kapal.spmk || "-"],
-        ["PPK", kapal.ppk || "-"],
-        ["Jenis Barang", kapal.jenisBarang || "-"],
-        ["ETB", kapal.etb || "-"],
-        ["ETD", kapal.etd || "-"],
-        ["Remark", kapal.remark || "-"],
-      ];
+      // ---------- GRID 6 BOX ----------
+      let x = 15;
+      let y = 40;
+      const boxWidth = 60;
+      const boxHeight = 45;
 
-      let textY = y + 14;
-      const valueX = x + 30;
+      kapalList.forEach((kapal, index) => {
+        // Garis kotak
+        doc.rect(x, y, boxWidth, boxHeight);
 
-      fields.forEach(([label, value]) => {
-        doc.text(label, x + 4, textY);
-        doc.text(String(value), valueX, textY);
-        textY += 5;
+        // Judul di dalam kotak
+        doc.setFontSize(11);
+        doc.text(`KAPAL ${index + 1}`, x + boxWidth / 2, y + 6, {
+          align: "center",
+        });
+
+        // Isi tabel
+        doc.setFontSize(9);
+
+        const fields = [
+          ["Nama Kapal", kapal.namaKapal || "-"],
+          ["SPMK", kapal.spmk || "-"],
+          ["PPK", kapal.ppk || "-"],
+          ["Jenis Barang", kapal.jenisBarang || "-"],
+          ["ETB", kapal.etb || "-"],
+          ["ETD", kapal.etd || "-"],
+          ["Remark", kapal.remark || "-"],
+        ];
+
+        let textY = y + 14;
+        const valueX = x + 30;
+
+        fields.forEach(([label, value]) => {
+          doc.text(label, x + 4, textY);
+          doc.text(String(value), valueX, textY);
+          textY += 5;
+        });
+
+        // Pindah kolom
+        x += boxWidth + 5;
+
+        // Turun baris jika sudah 3 box
+        if ((index + 1) % 3 === 0) {
+          x = 15;
+          y += boxHeight + 8;
+        }
       });
 
-      // Pindah kolom
-      x += boxWidth + 5;
+      // ---------- SAVE FILE ----------
+      doc.save(`Laporan_${terminal}_${tanggal}_${shift}.pdf`);
 
-      // Turun baris jika sudah 3 box
-      if ((index + 1) % 3 === 0) {
-        x = 15;
-        y += boxHeight + 8;
-      }
+      console.log("✅ Data tersimpan & PDF berhasil diunduh");
+      // ======================================================
+
+    } catch (err) {
+      console.error("❌ Gagal menyimpan data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateField = (index, field, value) => {
+    setKapalList((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
     });
-
-    // ---------- SAVE FILE ----------
-    doc.save(`Laporan_${terminal}_${tanggal}_${shift}.pdf`);
-
-    console.log("✅ Data tersimpan & PDF berhasil diunduh");
-    // ======================================================
-
-  } catch (err) {
-    console.error("❌ Gagal menyimpan data:", err);
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-const updateField = (index, field, value) => {
-  setKapalList((prev) => {
-    const updated = [...prev];
-    updated[index] = { ...updated[index], [field]: value };
-    return updated;
-  });
-};
+  };
 
   const formatTanggalHeader = (tanggal) => {
     if (!tanggal) return "";
@@ -199,7 +199,6 @@ const updateField = (index, field, value) => {
                 onChange={(e) => setTerminal(e.target.value)}
               >
                 <option value="">Pilih Terminal</option>
-                <option value="Jamrud">Jamrud</option>
                 <option value="Nilam">Nilam</option>
                 <option value="Mirah">Mirah</option>
               </Select>
@@ -243,89 +242,323 @@ const updateField = (index, field, value) => {
       )}
 
       <GridContainer>
-        {kapalList.map((kapal, i) => (
-          <Box key={i}>
-            <Field>
-              <Label>Nama Kapal</Label>
-              <Input
-                contentEditable
-                suppressContentEditableWarning
-                onInput={(e) => updateField(i, "namaKapal", e.target.innerText)}
-              >
-                {kapal.namaKapal}
-              </Input>
-            </Field>
+  {kapalList.map((kapal, i) => (
+    <Box key={i}>
+      {/* NAME OF SHIP */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>NAME OF SHIP</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px", fontWeight: "normal" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "namaKapal", e.target.innerText)}
+        >
+          {kapal.namaKapal}
+        </Input>
+      </Field>
 
-            <Field>
-              <Label>SPMK</Label>
-              <Input
-                contentEditable
-                suppressContentEditableWarning
-                onInput={(e) => updateField(i, "spmk", e.target.innerText)}
-              >
-                {kapal.spmk}
-              </Input>
-            </Field>
+      {/* DERMAGA & KADE */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>DERMAGA & KADE</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "dermagaKade", e.target.innerText)}
+        >
+          {kapal.dermagaKade}
+        </Input>
+      </Field>
 
-            <Field>
-              <Label>PPK</Label>
-              <Input
-                contentEditable
-                suppressContentEditableWarning
-                onInput={(e) => updateField(i, "ppk", e.target.innerText)}
-              >
-                {kapal.ppk}
-              </Input>
-            </Field>
+      {/* SPMK */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>SPMK</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "spmk", e.target.innerText)}
+        >
+          {kapal.spmk}
+        </Input>
+      </Field>
 
-            <Field>
-              <Label>Jenis Barang</Label>
-              <Input
-                contentEditable
-                suppressContentEditableWarning
-                onInput={(e) =>
-                  updateField(i, "jenisBarang", e.target.innerText)
-                }
-              >
-                {kapal.jenisBarang}
-              </Input>
-            </Field>
+      {/* PPK */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>PPK</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "ppk", e.target.innerText)}
+        >
+          {kapal.ppk}
+        </Input>
+      </Field>
 
-            <Field>
-              <Label>ETB</Label>
-              <Input
-                contentEditable
-                suppressContentEditableWarning
-                onInput={(e) => updateField(i, "etb", e.target.innerText)}
-              >
-                {kapal.etb}
-              </Input>
-            </Field>
+      {/* AGENT / STEV */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>AGENT / STEV</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "agentStev", e.target.innerText)}
+        >
+          {kapal.agentStev}
+        </Input>
+      </Field>
 
-            <Field>
-              <Label>ETD</Label>
-              <Input
-                contentEditable
-                suppressContentEditableWarning
-                onInput={(e) => updateField(i, "etd", e.target.innerText)}
-              >
-                {kapal.etd}
-              </Input>
-            </Field>
+      {/* COMMODITY */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>COMMODITY</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "commodity", e.target.innerText)}
+        >
+          {kapal.commodity}
+        </Input>
+      </Field>
 
-            <Field>
-              <Label>Remark</Label>
-              <Input
-                contentEditable
-                suppressContentEditableWarning
-                onInput={(e) => updateField(i, "remark", e.target.innerText)}
-              >
-                {kapal.remark}
-              </Input>
-            </Field>
-          </Box>
-        ))}
-      </GridContainer>
+      {/* ETB / ETD */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>ETB/ETD</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "etb", e.target.innerText)}
+        >
+          {kapal.etbetd}
+        </Input>
+      </Field>
+
+      {/* FIRST LINE */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>FIRST LINE</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "firstLine", e.target.innerText)}
+        >
+          {kapal.firstLine}
+        </Input>
+      </Field>
+
+      {/* START D/L */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>START D/L</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "startDL", e.target.innerText)}
+        >
+          {kapal.startDL}
+        </Input>
+      </Field>
+
+      {/* EQUIPMENT */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>EQUIPMENT</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "equipment", e.target.innerText)}
+        >
+          {kapal.equipment}
+        </Input>
+      </Field>
+
+      {/* DAY */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>DAY</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "day", e.target.innerText)}
+        >
+          {kapal.day}
+        </Input>
+      </Field>
+
+      {/* MANIFEST */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>MANIFEST</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "manifest", e.target.innerText)}
+        >
+          {kapal.manifest}
+        </Input>
+      </Field>
+
+      {/* DISCH / SHIFT */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>DISCH / SHIFT</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "dischShift", e.target.innerText)}
+        >
+          {kapal.dischShift}
+        </Input>
+      </Field>
+
+      {/* PREVIOUS */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>PREVIOS</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "previous", e.target.innerText)}
+        >
+          {kapal.previous}
+        </Input>
+      </Field>
+
+      {/* BALANCE */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>BALANCE</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "balance", e.target.innerText)}
+        >
+          {kapal.balance}
+        </Input>
+      </Field>
+
+      {/* ESTIMASI */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>ESTIMASI</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "estimasi", e.target.innerText)}
+        >
+          {kapal.estimasi}
+        </Input>
+      </Field>
+
+      {/* COMPLETED */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>COMPLETED</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "completed", e.target.innerText)}
+        >
+          {kapal.completed}
+        </Input>
+      </Field>
+
+      {/* LAST LINE */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>LAST LINE</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "lastLine", e.target.innerText)}
+        >
+          {kapal.lastLine}
+        </Input>
+      </Field>
+
+      {/* NOT TIME */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>NOT TIME (JAM)</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "notTime", e.target.innerText)}
+        >
+          {kapal.notTime}
+        </Input>
+      </Field>
+
+      {/* IDLE TIME */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>IDLE TIME (JAM)</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "idleTime", e.target.innerText)}
+        >
+          {kapal.idleTime}
+        </Input>
+      </Field>
+
+      {/* EFECTIF TIME */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>EFFECTIF TIME (JAM)</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "efectifTime", e.target.innerText)}
+        >
+          {kapal.efectifTime}
+        </Input>
+      </Field>
+
+      {/* TGH */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>TGH</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "tgh", e.target.innerText)}
+        >
+          {kapal.tgh}
+        </Input>
+      </Field>
+
+      {/* KINERJA */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>KINERJA</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "kinerja", e.target.innerText)}
+        >
+          {kapal.kinerja}
+        </Input>
+      </Field>
+
+      {/* KETERANGAN */}
+      <Field>
+        <Label style={{ fontWeight: "normal", fontSize: "11px" }}>KETERANGAN</Label>
+        <Input
+          contentEditable
+          style={{ fontSize: "11px" }}
+          suppressContentEditableWarning
+          onInput={(e) => updateField(i, "keterangan", e.target.innerText)}
+        >
+          {kapal.keterangan}
+        </Input>
+      </Field>
+    </Box>
+  ))}
+</GridContainer>
+
 
       <ButtonWrapper>
         <SaveButton onClick={handleSaveAndDownload} disabled={loading}>
