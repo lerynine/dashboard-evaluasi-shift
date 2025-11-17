@@ -20,11 +20,6 @@ export default function Sidebar({ open, setOpen }) {
       </Brand>
 
       <NavList>
-        {/* Menu Input Data (paling atas) */}
-        <StyledNavLink to="/input" onClick={() => setOpen(false)}>
-          <FaPlusCircle />
-          <span>Input Data</span>
-        </StyledNavLink>
 
         {/* Menu Dashboard */}
         <StyledNavLink to="/dashboard" onClick={() => setOpen(false)}>

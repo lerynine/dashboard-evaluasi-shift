@@ -86,10 +86,11 @@ function convertToISO(input) {
     if (!month || !day || !rest) return "";
 
     const [year, time] = rest.split(" ");
-    const dateStr = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")} ${time || "00:00:00"}`;
+    // gunakan format aman Safari: YYYY/MM/DD HH:mm:ss
+    const dateStr = `${year}/${month.padStart(2, "0")}/${day.padStart(2, "0")} ${time || "00:00:00"}`;
 
-    // Pastikan waktu tetap waktu lokal (hindari pergeseran UTC)
     const localDate = new Date(dateStr);
+
     if (isNaN(localDate)) return "";
 
     const offsetMs = localDate.getTimezoneOffset() * 60000;
@@ -186,44 +187,53 @@ const formatNumber = (num) => {
       // --- 1️⃣ Ambil dari Firestore ---
       const querySnapshot = await getDocs(collection(db, "laporan"));
       const firestoreData = querySnapshot.docs.map((doc) => {
-        const d = doc.data();
+  const d = doc.data();
 
-        // Ambil tanggal dari Timestamp Firestore
-        let tanggal = "";
-        if (d.createdAt && d.createdAt.toDate) {
-          const dateObj = d.createdAt.toDate();
-          tanggal = dateObj.toLocaleDateString("en-CA");
-        }
+  // 🔍 Debug semua field dari dokumen
+  console.log("🔥 Firestore DOC:", doc.id, d);
 
-        const jumlahMuatan = toNumber(d.jumlahMuatan);
-        const realisasiBongkarMuat = toNumber(d.realisasiBongkarMuat);
-        const perencanaanShift = toNumber(d.perencanaanShift);
-        const realisasiShift = toNumber(d.realisasiShift);
+  // 🔍 Debug khusus etbetd
+  console.log("🟦 Firestore etbetd:", d.etbetd, "typeof =", typeof d.etbetd);
 
-        const targetPerShift = perencanaanShift ? jumlahMuatan / perencanaanShift : 0;
-        const totalTarget = targetPerShift * realisasiShift;
-        const status = realisasiBongkarMuat >= totalTarget ? "ON SCHEDULE" : "DELAY";
-        const balance = jumlahMuatan - realisasiBongkarMuat;
+  let tanggal = "";
+  if (d.createdAt && d.createdAt.toDate) {
+    const dateObj = d.createdAt.toDate();
+    tanggal = dateObj.toLocaleDateString("en-CA");
+  }
 
-        return {
-          sumber: "firestore",
-          tanggal,
-          terminal: d.terminal || "",
-          shift: d.shift || "",
-          namaKapal: d.namaKapal || "",
-          realisasiTgh: d.realisasiTgh || "",
-          ketercapaian: d.ketercapaian || "",
-          jumlahMuatan,
-          realisasiBongkarMuat,
-          perencanaanShift,
-          realisasiShift,
-          balance,
-          tambatan: d.tambatan || "",
-          keterangan: d.remark || d.keterangan || "",
-          status,
-          lampiran: d.lampiran || [],
-        };
+  const jumlahMuatan = toNumber(d.jumlahMuatan);
+  const realisasiBongkarMuat = toNumber(d.realisasiBongkarMuat);
+  const perencanaanShift = toNumber(d.perencanaanShift);
+  const realisasiShift = toNumber(d.realisasiShift);
+
+  const targetPerShift = perencanaanShift ? jumlahMuatan / perencanaanShift : 0;
+  const totalTarget = targetPerShift * realisasiShift;
+  const status = realisasiBongkarMuat >= totalTarget ? "ON SCHEDULE" : "DELAY";
+  const balance = jumlahMuatan - realisasiBongkarMuat;
+
+  return {
+    sumber: "firestore",
+    tanggal,
+    terminal: d.terminal || "",
+    shift: d.shift || "",
+    namaKapal: d.namaKapal || "",
+    realisasiTgh: d.realisasiTgh || "",
+    ketercapaian: d.ketercapaian || "",
+    jumlahMuatan,
+    realisasiBongkarMuat,
+    perencanaanShift,
+    realisasiShift,
+    balance,
+    tambatan: d.tambatan || "",
+    keterangan: d.remark || d.keterangan || "",
+    status,
+    lampiran: d.lampiran || [],
+
+    // ✅ masukkan ini!
+    etbetd: d.etbetd || "",
+  };
       }).filter(r => r.namaKapal);
+
 
       console.log(`✅ Firestore: ${firestoreData.length} data diambil.`);
 
@@ -281,6 +291,17 @@ const formatNumber = (num) => {
       // --- 3️⃣ Gabungkan kedua sumber data ---
       const combined = [...firestoreData, ...sheetData];
       console.log(`📊 Total data gabungan: ${combined.length}`);
+      console.log("📘 ETBETD dari Firestore:", 
+        firestoreData.map(x => x.etbetd)
+      );
+
+      console.log("📙 ETBETD dari Sheet:", 
+        sheetData.map(x => x.etbetd)
+      );
+
+      console.log("📗 ETBETD Combined:", 
+        combined.map(x => ({ sumber: x.sumber, etbetd: x.etbetd }))
+      );
 
       setRawData(combined);
       setSummary(summary);
@@ -1013,6 +1034,7 @@ const NilamLayout = ({ data = [], selectedTerminals = [] }) => {
         perencanaanShift: match ? match.perencanaanShift : null,
         balance: match ? match.balance : null,
         status: match ? match.status : null,
+        etbetd: match ? match.etbetd : null,
       };
     });
   }, [data]);
@@ -1124,6 +1146,7 @@ const MirahLayout = ({ data = [], selectedTerminals = [] }) => {
         perencanaanShift: match ? match.perencanaanShift : null,
         balance: match ? match.balance : null,
         status: match ? match.status : null,
+        etbetd: match ? match.etbetd : null,
       };
     });
   }, [data]);
