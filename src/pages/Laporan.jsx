@@ -13,12 +13,29 @@ const Laporan = () => {
   const [shift, setShift] = useState("");
   const [loading, setLoading] = useState(false);
   const [grup, setGrup] = useState("");
+const berthLabels = ["Berth 1", "Berth 2", "Berth 3", "Berth 4", "Berth 5", "Berth 6"];
 
-  const emptyKapal = {
-  terminalBox: "", // ⬅️ terminal khusus untuk tiap box
+const getAutoTerminalBox = (terminalUtama, tambatan) => {
+  if (!terminalUtama || !tambatan) return "";
+
+  const berthNumber = parseInt(tambatan.replace("Berth ", ""), 10);
+
+  if (terminalUtama.toLowerCase().includes("mirah")) {
+    return berthNumber <= 3 ? "MIRAH SELATAN" : "MIRAH TIMUR";
+  }
+
+  if (terminalUtama.toLowerCase().includes("nilam")) {
+    return berthNumber <= 3 ? "NILAM SELATAN" : "NILAM UTARA";
+  }
+
+  return "";
+};
+
+const initialKapalList = berthLabels.map((label) => ({
+  terminalBox: getAutoTerminalBox(terminal, label),
   dermaga: "",
   namaKapal: "",
-  tambatan: "",
+  tambatan: label, // otomatis dari berthLabels
   spmk: "",
   ppk: "",
   AgentStevedore: "",
@@ -28,6 +45,8 @@ const Laporan = () => {
   startDL: "",
   equipment: "",
   day: "",
+  perencanaanShift: "",
+  realisasiShift: "",
   jumlahMuatan: "",
   dischShift: "",
   realisasiBongkarMuat: "",
@@ -41,14 +60,12 @@ const Laporan = () => {
   realisasiTgh: "",
   ketercapaian: "",
   remark: "",
-};
+}));
+
+const [kapalList, setKapalList] = useState(initialKapalList);
 
 
-  const [kapalList, setKapalList] = useState(
-    Array.from({ length: 6 }, () => ({ ...emptyKapal }))
-  );
-
-  const handleSaveAndDownload = async () => {
+const handleSaveAndDownload = async () => {
     if (!tanggal || !terminal || !shift) {
       alert("Mohon lengkapi Tanggal, Terminal, dan Shift");
       return;
@@ -61,6 +78,12 @@ const Laporan = () => {
       // 1️⃣ Payload lengkap untuk Firestore
       // -----------------------------
       for (const kapal of kapalList) {
+
+      // 🚨 LEWATI jika nama kapal kosong
+      if (!kapal.namaKapal || kapal.namaKapal.trim() === "") {
+        continue; 
+      }
+
       const payload = {
         tanggal,
         terminal,
@@ -82,6 +105,8 @@ const Laporan = () => {
         startDL: kapal.startDL || "",
         equipment: kapal.equipment || "",
         day: kapal.day || "",
+        perencanaanShift: kapal.perencanaanShift || "",
+        realisasiShift: kapal.realisasiShift || "",
         jumlahMuatan: Number(kapal.jumlahMuatan) || 0,
         dischShift: Number(kapal.dischShift) || 0,
         realisasiBongkarMuat: Number(kapal.realisasiBongkarMuat) || 0,
@@ -181,7 +206,7 @@ const Laporan = () => {
         doc.rect(x, y, boxWidth, boxHeight);
 
         doc.setFontSize(7);
-        let textY = y + 12;
+        let textY = y + 6;
 
         const fields = [
           ["NAME OF SHIP", kapal.namaKapal || "-"],
@@ -210,10 +235,26 @@ const Laporan = () => {
           ["REMARK", kapal.remark || "-"],
         ];
 
-        fields.forEach(([label, value]) => {
-          doc.text(`${label}: ${value}`, x + 3, textY);
-          textY += 3.4;
-        });
+      fields.forEach(([label, value]) => {
+  // 🔥 Label bold
+  doc.setFont("helvetica", "bold");
+  doc.text(`${label}:`, x + 3, textY);
+
+  // 🔥 Value normal, geser sedikit ke kanan
+  doc.setFont("helvetica", "normal");
+  doc.text(`${value}`, x + 28, textY);
+
+  // Default line spacing
+  let lineHeight = 3.4;
+
+  // 🔥 Jarak ekstra setelah LAST LINE
+  if (label === "LAST LINE") lineHeight = 7;
+
+  // 🔥 Jarak ekstra setelah TGH
+  if (label === "TGH") lineHeight = 7;
+
+  textY += lineHeight;
+});
 
         x += boxWidth;
         if ((index + 1) % 3 === 0) {
@@ -237,7 +278,7 @@ const Laporan = () => {
     }
   };
 
-  const getTerminalOptions = (t) => {
+const getTerminalOptions = (t) => {
   if (!t) return [];
 
   if (t.includes("Nilam")) return ["Nilam Selatan", "Nilam Utara"];
@@ -247,7 +288,7 @@ const Laporan = () => {
   return [];
 };
 
-  const getBerthOptions = (terminalBox) => {
+const getBerthOptions = (terminalBox) => {
   switch (terminalBox) {
     case "Nilam Utara":
       return ["berth 4", "berth 5", "berth 6"];
@@ -261,7 +302,6 @@ const Laporan = () => {
       return [];
   }
 };
-
 
   const updateField = (i, field, value) => {
     setKapalList((prev) =>
@@ -365,43 +405,15 @@ const Laporan = () => {
       <GridContainer>
         {kapalList.map((kapal, i) => (
           <Box key={i}>
+          <div style={{ 
+            fontWeight: "bold", 
+            fontSize: "12px", 
+            marginBottom: "6px",
+            textAlign: "center"
+          }}>
+            {kapal.tambatan}
+          </div>
 
-          {/* TERMINAL PER BOX */}
-          <Field>
-            <Label style={{ fontWeight: "normal", fontSize: "9px" }}>
-              TERMINAL
-            </Label>
-            <Select
-              value={kapal.terminalBox}
-              onChange={(e) => updateField(i, "terminalBox", e.target.value)}
-            >
-              <option value="">Pilih Terminal</option>
-
-              {getTerminalOptions(terminal).map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </Select>
-          </Field>
-
-          {/* BERTH PER BOX → tergantung terminalBox */}
-          <Field>
-            <Label style={{ fontWeight: "normal", fontSize: "9px" }}>
-              BERTH
-            </Label>
-
-            <Select
-              value={kapal.tambatan}
-              onChange={(e) => updateField(i, "tambatan", e.target.value)}
-              disabled={!kapal.terminalBox}   // Nonaktif jika terminal belum dipilih
-            >
-              <option value="">Pilih Berth</option>
-
-              {getBerthOptions(kapal.terminalBox).map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </Select>
-          </Field>
-            
             {/* NAME OF SHIP */}
             <Field>
               <Label style={{ fontWeight: "normal", fontSize: "9px" }}>NAME OF SHIP</Label>
@@ -501,12 +513,30 @@ const Laporan = () => {
               />
             </Field>
 
+            {/* JUMLAH PERENCANAAN SHIFT */}
+            <Field>
+              <Label style={{ fontWeight: "normal", fontSize: "9px" }}>JUMLAH PERENCANAAN SHIFT</Label>
+              <EditableInput
+                value={kapal.perencanaanShift || ""}
+                onChange={(v) => updateField(i, "perencanaanShift", v)}
+              />
+            </Field>
+
+            {/* REALISASI JUMLAH SHIFT */}
+            <Field>
+              <Label style={{ fontWeight: "normal", fontSize: "9px" }}>REALISASI JUMLAH SHIFT</Label>
+              <EditableInput
+                value={kapal.realisasiShift || ""}
+                onChange={(v) => updateField(i, "realisasiShift", v)}
+              />
+            </Field>
+
             {/* MANIFEST */}
             <Field>
               <Label style={{ fontWeight: "normal", fontSize: "9px" }}>MANIFEST</Label>
               <EditableInput
                 value={kapal.jumlahMuatan}
-                onChange={(v) => updateField(i, "jumlahMuatan", Number(v) || 0)}
+                onChange={(v) => updateField(i, "jumlahMuatan", v)}
               />
             </Field>
 
@@ -515,7 +545,7 @@ const Laporan = () => {
               <Label style={{ fontWeight: "normal", fontSize: "9px" }}>DISCH/SHIFT</Label>
               <EditableInput
                 value={kapal.dischShift}
-                onChange={(v) => updateField(i, "dischShift", Number(v) || 0)}
+                onChange={(v) => updateField(i, "dischShift", v)}
               />
             </Field>
 
@@ -524,7 +554,7 @@ const Laporan = () => {
               <Label style={{ fontWeight: "normal", fontSize: "9px" }}>PREVIOUS</Label>
               <EditableInput
                 value={kapal.realisasiBongkarMuat}
-                onChange={(v) => updateField(i, "realisasiBongkarMuat", Number(v) || 0)}
+                onChange={(v) => updateField(i, "realisasiBongkarMuat", v)}
               />
             </Field>
 
