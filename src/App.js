@@ -1,16 +1,96 @@
 // src/App.jsx
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
+
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Input from "./pages/Input";
-import Laporan from "./pages/Laporan"; // ✅ Tambahkan import halaman laporan
+import Laporan from "./pages/Laporan";
+import WeeklyDashboard from "./pages/WeeklyDashboard";
+import KegiatanList from "./pages/KegiatanList";
+import DetailKegiatan from "./pages/DetailKegiatan";
+import UpdateKegiatan from "./pages/UpdateKegiatan"; // ⭐ TAMBAHAN
+
+import { PrivateRoute } from "./PrivateRoute";
 
 function App() {
   return (
     <Routes>
-      <Route path="/input" element={<Input />} />  {/* ✅ Input Data */}
-      <Route path="/dashboard" element={<Dashboard />} />  {/* ✅ Dashboard */}
-      <Route path="/laporan" element={<Laporan />} />  {/* ✅ Halaman Laporan */}
-      <Route path="*" element={<Dashboard />} />  {/* ✅ Default ke Input */}
+      {/* 🔓 PUBLIC */}
+      <Route path="/login" element={<Login />} />
+
+      {/* 🔐 PROTECTED */}
+      <Route
+        path="/dashboard"
+        element={
+          <PrivateRoute>
+            <Dashboard />
+          </PrivateRoute>
+        }
+      />
+
+      {/* ⭐ LIST KEGIATAN */}
+      <Route
+        path="/kegiatan"
+        element={
+          <PrivateRoute>
+            <KegiatanList />
+          </PrivateRoute>
+        }
+      />
+
+      {/* ⭐ DETAIL KEGIATAN */}
+      <Route
+        path="/kegiatan/:id"
+        element={
+          <PrivateRoute>
+            <DetailKegiatan />
+          </PrivateRoute>
+        }
+      />
+
+      {/* ⭐ UPDATE KEGIATAN (BERDASAR ID) */}
+      <Route
+        path="/kegiatan/:id/update"
+        element={
+          <PrivateRoute>
+            <UpdateKegiatan />
+          </PrivateRoute>
+        }
+      />
+
+      {/* ⭐ INPUT */}
+      <Route
+        path="/input"
+        element={
+          <PrivateRoute>
+            <Input />
+          </PrivateRoute>
+        }
+      />
+
+      {/* ⭐ LAPORAN */}
+      <Route
+        path="/laporan"
+        element={
+          <PrivateRoute>
+            <Laporan />
+          </PrivateRoute>
+        }
+      />
+
+      {/* ⭐ WEEKLY */}
+      <Route
+        path="/weekly"
+        element={
+          <PrivateRoute>
+            <WeeklyDashboard />
+          </PrivateRoute>
+        }
+      />
+
+      {/* ⭐ DEFAULT */}
+      <Route path="/" element={<Navigate to="/dashboard" />} />
+      <Route path="*" element={<Navigate to="/dashboard" />} />
     </Routes>
   );
 }

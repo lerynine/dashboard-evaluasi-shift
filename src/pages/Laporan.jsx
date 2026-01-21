@@ -13,23 +13,24 @@ const Laporan = () => {
   const [shift, setShift] = useState("");
   const [loading, setLoading] = useState(false);
   const [grup, setGrup] = useState("");
-const berthLabels = ["Berth 1", "Berth 2", "Berth 3", "Berth 4", "Berth 5", "Berth 6"];
 
-const getAutoTerminalBox = (terminalUtama, tambatan) => {
-  if (!terminalUtama || !tambatan) return "";
+  const berthLabels = ["Berth 1", "Berth 2", "Berth 3", "Berth 4", "Berth 5", "Berth 6"];
 
-  const berthNumber = parseInt(tambatan.replace("Berth ", ""), 10);
+  const getAutoTerminalBox = (terminalUtama, tambatan) => {
+    if (!terminalUtama || !tambatan) return "";
 
-  if (terminalUtama.toLowerCase().includes("mirah")) {
-    return berthNumber <= 3 ? "MIRAH SELATAN" : "MIRAH TIMUR";
-  }
+    const berthNumber = parseInt(tambatan.replace("Berth ", ""), 10);
 
-  if (terminalUtama.toLowerCase().includes("nilam")) {
-    return berthNumber <= 3 ? "NILAM SELATAN" : "NILAM UTARA";
-  }
+    if (terminalUtama.toLowerCase().includes("mirah")) {
+      return berthNumber <= 3 ? "MIRAH SELATAN" : "MIRAH TIMUR";
+    }
 
-  return "";
-};
+    if (terminalUtama.toLowerCase().includes("nilam")) {
+      return berthNumber <= 3 ? "NILAM SELATAN" : "NILAM UTARA";
+    }
+
+    return "";
+  };
 
 const initialKapalList = berthLabels.map((label) => ({
   terminalBox: getAutoTerminalBox(terminal, label),
@@ -64,10 +65,33 @@ const initialKapalList = berthLabels.map((label) => ({
 
 const [kapalList, setKapalList] = useState(initialKapalList);
 
+  useEffect(() => {
+  // Ambil terminalBox pertama yang tidak kosong
+  const firstBox = kapalList.find(k => k.terminalBox)?.terminalBox;
+
+  if (firstBox) {
+    setTerminal(firstBox); // langsung isi Nilam Selatan / Mirah Timur
+  }
+}, [kapalList]);
 
 const handleSaveAndDownload = async () => {
     if (!tanggal || !terminal || !shift) {
       alert("Mohon lengkapi Tanggal, Terminal, dan Shift");
+      return;
+    }
+
+const formatTitleCase = (text) => {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
+    // 🔥 Panggil validator untuk setiap kapal sebelum lanjut
+    if (!validateRequiredFields()) {
+      // Jika return false → hentikan proses
       return;
     }
 
@@ -84,15 +108,22 @@ const handleSaveAndDownload = async () => {
         continue; 
       }
 
+      const autoTerminalBox = formatTitleCase(
+  getAutoTerminalBox(terminal, kapal.tambatan)
+);
+
+// langsung update terminal
+if (autoTerminalBox) setTerminal(autoTerminalBox);
+
       const payload = {
         tanggal,
-        terminal,
+        terminal: kapal.autoTerminalBox || terminal,
         shift,
         grup: grup || "-",
         createdAt: new Date(),
 
         // ⬇️ Data per kapal (1 dokumen = 1 kapal)
-        terminalBox: kapal.terminalBox || "",
+        terminalBox: kapal.autoTerminalBox || "",
         tambatan: kapal.tambatan || "",
         namaKapal: kapal.namaKapal || "",
         dermaga: kapal.dermaga || "",
@@ -288,6 +319,36 @@ const getTerminalOptions = (t) => {
   return [];
 };
 
+function validateRequiredFields() {
+  for (let i = 0; i < kapalList.length; i++) {
+    const kapal = kapalList[i];
+
+    // Jika nama kapal kosong, skip
+    if (!kapal.namaKapal || kapal.namaKapal.trim() === "") continue;
+
+    // List field wajib diisi jika namaKapal terisi
+    const requiredFields = [
+      { key: "etbetd", label: "ETB/ETD" },
+      { key: "perencanaanShift", label: "Jumlah Perencanaan Shift" },
+      { key: "realisasiShift", label: "Realisasi Jumlah Shift" },
+      { key: "jumlahMuatan", label: "Manifest" },
+      { key: "realisasiBongkarMuat", label: "Previous" }
+    ];
+
+    // Cek semua field wajib
+    for (const field of requiredFields) {
+      if (!kapal[field.key] || kapal[field.key].toString().trim() === "") {
+        alert(
+          `Field "${field.label}" wajib diisi untuk kapal: ${kapal.namaKapal}`
+        );
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 const getBerthOptions = (terminalBox) => {
   switch (terminalBox) {
     case "Nilam Utara":
@@ -391,6 +452,16 @@ const getBerthOptions = (terminalBox) => {
             </div>
           </FilterGrid>
         </Card>
+
+        {terminal && (
+        <div style={{ textAlign: "center", marginTop: "20px" }}>
+          <img
+            src={terminal === "Mirah" ? "/images/mirah.png" : "/images/nilam.png"}
+            alt={terminal}
+            style={{ width: "600px", objectFit: "contain" }}
+          />
+        </div>
+      )}
 
       {tanggal && terminal && (
         <HeaderSection>
@@ -517,8 +588,11 @@ const getBerthOptions = (terminalBox) => {
             <Field>
               <Label style={{ fontWeight: "normal", fontSize: "9px" }}>JUMLAH PERENCANAAN SHIFT</Label>
               <EditableInput
-                value={kapal.perencanaanShift || ""}
-                onChange={(v) => updateField(i, "perencanaanShift", v)}
+                value={kapal.perencanaanShift}
+                onChange={(v) => {
+                  const onlyNumbers = v.replace(/\D/g, "");
+                  updateField(i, "perencanaanShift", onlyNumbers);
+                }}
               />
             </Field>
 
@@ -526,17 +600,23 @@ const getBerthOptions = (terminalBox) => {
             <Field>
               <Label style={{ fontWeight: "normal", fontSize: "9px" }}>REALISASI JUMLAH SHIFT</Label>
               <EditableInput
-                value={kapal.realisasiShift || ""}
-                onChange={(v) => updateField(i, "realisasiShift", v)}
-              />
+                  value={kapal.realisasiShift}
+                  onChange={(v) => {
+                    const onlyNumbers = v.replace(/\D/g, "");
+                    updateField(i, "realisasiShift", onlyNumbers);
+                  }}
+                />
             </Field>
 
             {/* MANIFEST */}
             <Field>
               <Label style={{ fontWeight: "normal", fontSize: "9px" }}>MANIFEST</Label>
               <EditableInput
-                value={kapal.jumlahMuatan}
-                onChange={(v) => updateField(i, "jumlahMuatan", v)}
+                value={kapal.jumlahMuatan || ""}
+                onChange={(v) => {
+                    const onlyNumbers = v.replace(/\D/g, "");   // hapus semua huruf & simbol
+                    updateField(i, "jumlahMuatan", onlyNumbers);
+                }}
               />
             </Field>
 
@@ -553,9 +633,12 @@ const getBerthOptions = (terminalBox) => {
             <Field>
               <Label style={{ fontWeight: "normal", fontSize: "9px" }}>PREVIOUS</Label>
               <EditableInput
-                value={kapal.realisasiBongkarMuat}
-                onChange={(v) => updateField(i, "realisasiBongkarMuat", v)}
-              />
+                  value={kapal.realisasiBongkarMuat}
+                  onChange={(v) => {
+                    const onlyNumbers = v.replace(/\D/g, "");
+                    updateField(i, "realisasiBongkarMuat", onlyNumbers);
+                  }}
+                />
             </Field>
 
             {/* BALANCE */}

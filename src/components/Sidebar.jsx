@@ -1,13 +1,18 @@
 // src/components/Sidebar.jsx
 import styled from "styled-components";
-import { FaTachometerAlt, FaPlusCircle, FaFileAlt } from "react-icons/fa";
+import {
+  FaTachometerAlt,
+  FaPlusCircle,
+  FaFileAlt,
+  FaChartBar,
+  FaShip, // ⬅️ TAMBAH INI
+} from "react-icons/fa";
 import { NavLink } from "react-router-dom";
 
 export default function Sidebar({ open, setOpen }) {
   return (
     <SidebarContainer open={open}>
       <Brand>
-        {/* 🔹 Ganti URL di bawah dengan logo SPMT kamu */}
         <img
           src="/images/spmt-logo.png"
           alt="SPMT Logo"
@@ -20,17 +25,27 @@ export default function Sidebar({ open, setOpen }) {
       </Brand>
 
       <NavList>
-
         {/* Menu Dashboard */}
         <StyledNavLink to="/dashboard" onClick={() => setOpen(false)}>
           <FaTachometerAlt />
           <span>Dashboard</span>
         </StyledNavLink>
 
+        {/* ⭐ Menu Weekly Dashboard (Baru) */}
+        <StyledNavLink to="/weekly" onClick={() => setOpen(false)}>
+          <FaChartBar />
+          <span>Weekly</span>
+        </StyledNavLink>
+
         {/* Menu Laporan */}
         <StyledNavLink to="/laporan" onClick={() => setOpen(false)}>
           <FaFileAlt />
           <span>Laporan</span>
+        </StyledNavLink>
+
+        <StyledNavLink to="/kegiatan" onClick={() => setOpen(false)}>
+          <FaShip />
+          <span>Kegiatan Kapal</span>
         </StyledNavLink>
       </NavList>
     </SidebarContainer>
