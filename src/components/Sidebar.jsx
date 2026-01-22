@@ -37,15 +37,9 @@ export default function Sidebar({ open, setOpen }) {
           <span>Weekly</span>
         </StyledNavLink>
 
-        {/* Menu Laporan */}
-        <StyledNavLink to="/laporan" onClick={() => setOpen(false)}>
-          <FaFileAlt />
-          <span>Laporan</span>
-        </StyledNavLink>
-
         <StyledNavLink to="/kegiatan" onClick={() => setOpen(false)}>
           <FaShip />
-          <span>Kegiatan Kapal</span>
+          <span>Input</span>
         </StyledNavLink>
       </NavList>
     </SidebarContainer>

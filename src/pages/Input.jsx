@@ -833,7 +833,10 @@ export default function InputPage() {
                 </Question>
 
                 <Question>
-                  <Label>ETB (Estimated Time Berth)</Label>
+                  <Label>
+                    ETB (Estimated Time Berth)
+                    <span className="required">*</span>
+                  </Label>
                   <input
                     type="datetime-local"
                     name="etb"
@@ -842,7 +845,10 @@ export default function InputPage() {
                 </Question>
 
                 <Question>
-                  <Label>ETD (Estimated Time Departure)</Label>
+                  <Label>
+                    ETD (Estimated Time Departure)
+                    <span className="required">*</span>
+                  </Label>
                   <input
                     type="datetime-local"
                     name="etd"
@@ -851,7 +857,10 @@ export default function InputPage() {
                 </Question>
 
                 <Question>
-                  <Label>First Line (Waktu Sandar Pertama)</Label>
+                  <Label>
+                    First Line (Waktu Sandar Pertama)
+                    <span className="required">*</span>
+                  </Label>
                   <input
                     type="datetime-local"
                     name="firstLine"
@@ -860,7 +869,10 @@ export default function InputPage() {
                 </Question>
 
                 <Question>
-                  <Label>First D/L (Waktu Bongkar/Muat Pertama)</Label>
+                  <Label>
+                    First D/L (Waktu Bongkar/Muat Pertama)
+                    <span className="required">*</span>
+                  </Label>
                   <input
                     type="datetime-local"
                     name="firstDL"
@@ -869,7 +881,9 @@ export default function InputPage() {
                 </Question>
 
                 <Question>
-                  <Label>Activity Type</Label>
+                  <Label>
+                    Activity Type<span className="required">*</span>
+                  </Label>
                   <select name="activityType" onChange={handleChange}>
                     <option value="">Pilih Aktivitas</option>
                     <option value="DISCHARGE">DISCHARGE</option>
@@ -878,7 +892,9 @@ export default function InputPage() {
                 </Question>
 
                 <Question>
-                  <Label>Equipment</Label>
+                  <Label>
+                    Equipment<span className="required">*</span>
+                  </Label>
                   <input
                     name="equipment"
                     onChange={handleChange}
@@ -888,7 +904,9 @@ export default function InputPage() {
 
                 {/* Efisiensi Waktu Kerja */}
                 <Question>
-                  <Label>Not Time (Jam)</Label>
+                  <Label>
+                    Not Time (Jam)<span className="required">*</span>
+                  </Label>
                   <input
                     type="number"
                     name="not_time_hours"
@@ -900,7 +918,9 @@ export default function InputPage() {
                 </Question>
 
                 <Question>
-                  <Label>Idle Time (Jam)</Label>
+                  <Label>
+                    Idle Time (Jam)<span className="required">*</span>
+                  </Label>
                   <input
                     type="number"
                     name="idle_time_hours"
@@ -912,7 +932,9 @@ export default function InputPage() {
                 </Question>
 
                 <Question>
-                  <Label>Effective Time (Jam)</Label>
+                  <Label>
+                    Effective Time (Jam)<span className="required">*</span>
+                  </Label>
                   <input
                     type="number"
                     name="effective_time_hours"
@@ -1063,8 +1085,7 @@ export default function InputPage() {
 
                 <Question>
                   <Label>
-                    Completed{" "}
-                    <span className="required">*</span>
+                    Completed <span className="required">*</span>
                   </Label>
                   <input
                     type="text"

@@ -113,7 +113,7 @@ export default function UpdateKegiatan() {
 
       await updateDoc(ref, payload);
 
-      alert("✅ Update harian berhasil disimpan");
+      alert("✅ Update berhasil disimpan");
       navigate(`/kegiatan/${id}`);
     } catch (err) {
       console.error(err);
@@ -158,8 +158,6 @@ export default function UpdateKegiatan() {
 
         {/* ================= UPDATE HARIAN ================= */}
         <Card>
-          <h3>Update Harian (Ke-{updateIndex})</h3>
-
           <Row>
             <Field>
               <label>Shift</label>

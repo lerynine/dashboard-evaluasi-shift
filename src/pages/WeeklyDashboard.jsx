@@ -94,7 +94,7 @@ function convertToISO(input) {
     // gunakan format aman Safari: YYYY/MM/DD HH:mm:ss
     const dateStr = `${year}/${month.padStart(2, "0")}/${day.padStart(
       2,
-      "0"
+      "0",
     )} ${time || "00:00:00"}`;
 
     const localDate = new Date(dateStr);
@@ -170,6 +170,306 @@ function cleanNamaKapalDisplay(name = "") {
   return n;
 }
 
+const BRANCH_TERMINALS = {
+  BALIKPAPAN: ["KARIANGAU KALTIM TERMINAL", "SEMAYANG"],
+  BELAWAN: [
+    "CITRA-KADE 200",
+    "Citra - KADE 201",
+    "Citra - KADE 202",
+    "Citra - KADE 203",
+    "DERMAGA BELAWAN",
+    "DERMAGA BELAWAN LAMA",
+    "DERMAGA BELAWAN LAMA KD 001",
+    "DERMAGA BELAWAN LAMA KD 002",
+    "DERMAGA BELAWAN LAMA KD 003",
+    "DERMAGA BELAWAN LAMA KD 004",
+    "DERMAGA BELAWAN LAMA KD 005",
+    "DERMAGA BELAWAN LAMA KD 006",
+    "DERMAGA BELAWAN LAMA KD 007",
+    "DERMAGA BELAWAN LAMA KD 008",
+    "DERMAGA CITRA",
+    "DERMAGA IKD",
+    "DERMAGA PLTU BELAWAN",
+    "DERMAGA SEMEN ANDALAS BELAWAN",
+    "DERMAGA TJIPTA RIMBA DJAJA",
+    "Dermaga TUKS PT. PERUSAHAAN LISTRIK NEGARA (PERSERO) KITLUR SUMBAGUT",
+    "Dermaga TUKS PT. SEMEN ANDALAS INDONESIA",
+    "Dermaga TUKS PT. TJIPTA RIMBA DJAJA",
+    "DERMAGA UJUNG BARU",
+    "DERMAGA UJUNG BARU 101",
+    "DERMAGA UJUNG BARU 102",
+    "DERMAGA UJUNG BARU 103",
+    "DERMAGA UJUNG BARU 104",
+    "DERMAGA UJUNG BARU 105",
+    "DERMAGA UJUNG BARU 106",
+    "DERMAGA UJUNG BARU 107",
+    "DERMAGA UJUNG BARU 108",
+    "DERMAGA UJUNG BARU 109",
+    "DERMAGA UJUNG BARU 110",
+    "DERMAGA UJUNG BARU 111",
+    "DERMAGA UJUNG BARU 112",
+    "DERMAGA UJUNG BARU 113",
+    "DERMAGA UJUNG BARU 114",
+    "IKD 1",
+    "TERMINAL CURAH KERING IKD II",
+    "UJUNG BARU - DERMAGA FERRY",
+  ],
+  BENOA: ["DERMAGA SELATAN"],
+  BIMABADAS: [
+    "DERMAGA BIMA",
+    "DMG BIMA",
+    "DMG BIMA - NUSANTARA II",
+    "DMG KSOP BIMA NUSANTARA I KSP",
+    "DMG KSOP BIMA NUSANTARA KSP",
+    "DMG PELRA BIMA 1",
+    "DMG PELRA BIMA 2",
+    "KSOP BIMA PELRA KSP",
+    "RTK 01",
+    "SECURITY CHECK AREA",
+    "TERM PENUMPANG KOTABARU",
+  ],
+  BUMIHARJOBAGENDANG: [
+    "BUMBU KUNING YUTABA",
+    "DERMAGA ASDP",
+    "DERMAGA CITRA BORNEO CENTER",
+    "DERMAGA CURAH CAIR 1 BUMIHARJO",
+    "DERMAGA CURAH CAIR 2 BUMIHARJO",
+    "DERMAGA CURAHCAIR BUMIHARJO J2",
+    "DERMAGA JETTY 3 BUMIHARJO",
+    "DERMAGA KAPUAS PRIMA COAL 2",
+    "DERMAGA KORINDO PANGKALAN BUN",
+    "DERMAGA MULTIPURPOSE BUMIHARJO",
+    "DERMAGA PERTAMINA KUMAI",
+    "DERMAGA PINGGIRAN",
+    "DERMAGA PT.SAP",
+    "DERMAGA PUTRA BALI",
+    "DERMAGA SBI",
+    "DERMAGA UMUM KUMAI",
+    "DERMAGA UMUM PANGKALAN BUN",
+    "DERMAGA UMUM (P) PANGKALAN BUN",
+    "DERMAGA UMUM (P) SUKAMARA",
+    "DERMAGA UMUM SUKAMARA",
+    "EAGLE HIGH PLANTATION",
+    "ERYTHRINA NUGRAHA MEGAH",
+    "FAJAR ANEKA SENTOSA",
+    "GUNTUR ARTHA WIGUNA",
+    "INDOTRUBA TENGAH",
+    "IRVAN PRIMA PRATAMA",
+    "KALIMANTAN SAWIT KUSUMA",
+    "KALIMANTAN SUMBER ENERGI",
+    "KUMAI USAHA MARINA",
+    "PETRO ANDALAN",
+    "PRIMA BUDIARTA NUSA",
+    "SUNGAI RANGIT",
+    "WANASAWIT SUBUR LESTARI",
+  ],
+  DUMAI: [
+    "DERMAGA A DUMAI (DERMAGA_A)",
+    "DERMAGA A (KHUSUS SEMEN) (A-SEMEN)",
+    "DERMAGA B DALAM DUMAI (DERMAGA_BD)",
+    "DERMAGA B DUMAI (DERMAGA_B)",
+    "DERMAGA BEACHING DUMAI (BEACHING)",
+    "DERMAGA C DUMAI (DERMAGA_C)",
+    "DERMAGA D DUMAI (DERMAGA_D)",
+  ],
+  GRESIK: [
+    "DERMAGA 180",
+    "DERMAGA 265",
+    "DERMAGA 70",
+    "DERMAGA 78",
+    "DERMAGA BANGUN ARTA",
+    "DERMAGA IBL SISI DALAM",
+    "DERMAGA PELRA",
+    "DERMAGA PENUMPANG",
+    "DERMAGA TALUD TEGAK",
+    "DERMAGA TALUD TEGAK SISI DALAM",
+    "DERMAGA UMUM IBL SISI LUAR",
+    "DERMAGA UMUM MULTIPURPOSE",
+    "DERMAGA UMUM PENUMPANG",
+    "DERMAGA UMUM PT. GRESIK JASA TAMA",
+    "DERMAGA UMUM TALUD TEGAK KONVENSIONAL",
+    "RUANG TUNGGU KENDARAAN 01",
+    "RUANG TUNGGU PENUMPANG 01",
+  ],
+  JNM: [
+    "Jamrud Utara",
+    "Jamrud Selatan",
+    "Jamrud Barat",
+    "Nilam",
+    "Mirah",
+    "Surabaya Veem",
+  ],
+  KALIMAS: [],
+  LEMBAR: [
+    "BOARDING GATE 01",
+    "DERMAGA GILIMAS",
+    "DERMAGA LOKAL",
+    "DERMAGA LOKAL I",
+    "DERMAGA LOKAL II",
+    "DERMAGA NUSANTARA 2",
+    "DERMAGA NUSANTARA I",
+    "DERMAGA NUSANTARA II",
+    "DERMAGA PONTON",
+    "DERMAGA RAKYAT",
+    "MAIN GATE 01",
+    "MOORING BUOY BOSOWA",
+    "MOORING BUOY TIGA RODA",
+    "RTK GILIMAS",
+    "RTK GILIMAS 02",
+    "RTK LEMBAR",
+    "RTK LEMBAR 02",
+    "RUANG TUNGGU 01",
+    "RUANG TUNGGU 02",
+    "SECURITY CHECK AREA",
+    "TERMINAL GILIMAS",
+  ],
+  LHOKSEUMAWELANGSA: [
+    "Dermaga Umum",
+    "PELINDO - BREASTING DOLPHIN / CURAH CAIR",
+    "PELINDO - BREASTING DOLPHIN/ CURAH KERING",
+    "PELINDO - DERMAGA PENUMPANG",
+    "PELINDO - MULTIPURPOSE",
+    "PELINDO - MULTIPURPOSE (EX. AAF)",
+    "DERMAGA BARU EX-SINGAPORE",
+    "DERMAGA TAPAKTUAN",
+  ],
+  MAKASSAR: [
+    "DERMAGA CURAH CAIR BAGENDANG",
+    "DERMAGA MAKASSAR",
+    "DERMAGA MULTIPURSP BAGENDANG 1",
+    "DERMAGA MULTIPURSP BAGENDANG 2",
+    "HASANUDDIN - MULTIPURPOSE I",
+    "HATTA - CURAH KERING",
+    "SOEKARNO",
+    "SOEKARNO - MULTIPURPOSE III - BERDIKARI",
+    "SOEKARNO - MULTIPURPOSE II - INTERNASIONAL",
+    "SOEKARNO - RO RO",
+  ],
+  MALAHAYATIMEULABOH: [
+    "JETTY 1",
+    "JETTY 2",
+    "JETTY 3",
+    "DERMAGA BARU EX-SINGAPORE",
+    "DERMAGA MEULABOH LAMA",
+    "DERMAGA TAPAKTUAN",
+  ],
+  PAREPAREGARONKONG: [
+    "DERMAGA APBN",
+    "DERMAGA APBN - CAPPA UJUNG",
+    "DERMAGA LONTANGNGE",
+    "DERMAGA NUSANTARA",
+    "DERMAGA PARE PARE",
+    "DERMAGA PETI KEMAS",
+    "DERMAGA UMUM 1 GARONGKONG",
+  ],
+  SIBOLGA: [
+    "AREA SHIP TO SHIP (STS)",
+    "CARGO DAN TERMINAL PENUMPANG",
+    "DERMAGA 01 KIJANG",
+    "DERMAGA 46 DARAT",
+    "DERMAGA 46 LAUT",
+    "DERMAGA DOLPHIN DARAT",
+    "DERMAGA DOLPHIN LAUT",
+    "DERMAGA FERRY",
+    "DERMAGA LABUHAN ANGIN",
+    "DERMAGA SISI LUAR",
+    "DERMAGA TRESTEL DARAT",
+    "DERMAGA TRESTEL LAUT",
+    "LABUH",
+  ],
+  TANJUNGBALAIKARIMUN: [],
+  TANJUNGEMAS: [],
+  TANJUNGINTAN: [
+    "DERMAGA PUSRI",
+    "MULTIPURPOSE II (TAMBATAN VI)",
+    "MULTIPURPOSE I (TAMBATAN I - IV)",
+    "TAMBATAN I",
+    "TAMBATAN II",
+    "TAMBATAN III",
+    "TAMBATAN S2P PLTU I",
+    "TAMBATAN S2P PLTU II",
+    "TAMBATAN S2P PLTU III",
+    "TAMBATAN VI",
+    "TAMB. KARANG TALUN I",
+    "TAMB. KARANG TALUN II",
+    "WIJAYAPURA",
+    "YETTY DONAN I AREA 60",
+    "YETTY DONAN II AREA 60",
+  ],
+  TANJUNGPINANG: [
+    "AREA LABUH CAPE SETUMU",
+    "AREA LABUH PENYENGAT",
+    "AREA LABUH TERKULAI",
+    "BINTAN ALUMINA INDONESIA",
+    "BINTAN NUSAMULTI TUKS",
+    "BINTAN OFSHORE POSTPAY",
+    "DERMAGA 01 BATU ANAM",
+    "DERMAGA 01 KIJANG",
+    "DERMAGA 02 KIJANG",
+    "DERMAGA 50 METER",
+    "DERMAGA BATU ANAM",
+    "DERMAGA BEACHING",
+    "DERMAGA BETON",
+    "DERMAGA BINTAN MAHKOTA SUKSES",
+    "DERMAGA MEITECH EKA BINTAN",
+    "DERMAGA PERTAMINA KIJANG",
+    "DERMAGA PETIKEMAS",
+    "DERMAGA TUKS BINTANG KARTIKA",
+    "DERMAGA UMUM SRI BAYINTAN KIJANG",
+    "LABUH",
+    "PONTON A1",
+    "PONTON A2",
+    "PONTON BRAVO",
+    "PONTON C1",
+    "PONTON C2",
+    "PONTON D1",
+    "PONTON D2",
+    "PONTON VIP",
+    "RTK 01",
+    "RTK 02",
+    "RUANG TUNGGU DOMESTIK",
+    "RUANG TUNGGU INTERNASIONAL",
+    "SECURITY CHECK AREA",
+    "Terminal Penumpang SRI BAYINTAN KIJANG",
+    "Terminal Penumpang SRI BINTAN PURA",
+    "TUKS BINTAN KARISMA PRATAMA",
+    "TUKS CAPITAL TURBINES",
+    "WILAYAH LABUH PERAIRAN TEMBORA",
+    "WILAYAH STS TANJUNG TILI",
+    "WILAYAH STS TELANG POSTPAY",
+  ],
+  TANJUNGWANGI: [
+    "DERMAGA UMUM",
+    "DERMAGA UMUM TG WANGI",
+    "MAIN GATE 01",
+    "RTK 01",
+    "RTK 02",
+    "RUANG TUNGGU 01",
+    "RUANG TUNGGU 02",
+  ],
+  TRISAKTIMEKARPUTIH: [
+    "BASIRIH",
+    "DERMAGA 50",
+    "DERMAGA BEACHING",
+    "DERMAGA UMUM",
+    "JETTY 1",
+    "KADE AKR",
+    "MARTAPURA BARU",
+    "PELRA BASIRIH",
+    "PELRA MARTAPURA BARU",
+    "PELRA MARTAPURA LAMA",
+    "RTK 01",
+    "SECURITY CHECK AREA",
+    "TERM PENUMPANG TRISAKTI",
+    "TRISAKTI",
+    "TRISAKTI100",
+    "TRISAKTI200",
+    "TRISAKTI300",
+    "TRISAKTI400",
+    "TRISAKTI500",
+  ],
+};
+
 // ======================
 // Weekly Dashboard Page
 // ======================
@@ -183,13 +483,21 @@ export default function WeeklyDashboard() {
   defaultEnd.setDate(defaultStart.getDate() + 6); // Sabtu
 
   const [selectedWeek, setSelectedWeek] = useState(
-    today.toISOString().split("T")[0]
+    today.toISOString().split("T")[0],
   );
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
   const defaultWeekStart = new Date(today);
   defaultWeekStart.setDate(today.getDate() - today.getDay()); // minggu awal (Sunday)
+  // FILTER BRANCH
+  const [selectedBranch, setSelectedBranch] = useState("");
+
+  const availableTerminals = useMemo(() => {
+    if (!selectedBranch) return [];
+
+    return BRANCH_TERMINALS[selectedBranch] || [];
+  }, [selectedBranch]);
 
   const [rawData, setRawData] = useState([]);
   // FILTER TERMINAL
@@ -202,6 +510,10 @@ export default function WeeklyDashboard() {
 
   // Warna pie chart
   const COLORS = ["#0BDA51", "#D62828"];
+
+  useEffect(() => {
+    setSelectedTerminals([]);
+  }, [selectedBranch]);
 
   useEffect(() => {
     setStartDate(defaultStart.toISOString().split("T")[0]);
@@ -375,27 +687,25 @@ export default function WeeklyDashboard() {
       const s = startDate ? new Date(startDate) : null;
       const e = endDate ? new Date(endDate) : null;
 
-      // HANYA START → ambil >= start
       if (s && !e) return d >= s;
-
-      // HANYA END → ambil <= end
       if (!s && e) return d <= e;
-
-      // START & END → normal range
       if (s && e) return d >= s && d <= e;
-
-      // kalau dua-duanya kosong → tampilkan semua
       return true;
     });
+
+    // FILTER BRANCH
+    if (selectedBranch) {
+      const terminalsByBranch = BRANCH_TERMINALS[selectedBranch] || [];
+      filtered = filtered.filter((r) => terminalsByBranch.includes(r.terminal));
+    }
 
     // FILTER TERMINAL
     if (selectedTerminals.length > 0) {
       filtered = filtered.filter((r) => selectedTerminals.includes(r.terminal));
     }
 
-    console.log("=== FILTERED DATE RANGE ===", filtered);
     return filtered;
-  }, [rawData, startDate, endDate, selectedTerminals]);
+  }, [rawData, startDate, endDate, selectedBranch, selectedTerminals]);
 
   // ============================
   // 4️⃣ Group by namaKapal — pick latest values & sum realisasiBongkarMuat
@@ -451,7 +761,7 @@ export default function WeeklyDashboard() {
     });
 
     return Object.values(map).sort((a, b) =>
-      a.namaKapal > b.namaKapal ? 1 : -1
+      a.namaKapal > b.namaKapal ? 1 : -1,
     );
   }, [weeklyData]);
 
@@ -461,7 +771,7 @@ export default function WeeklyDashboard() {
   useEffect(() => {
     const delay = groupedWeekly.filter((d) => d.status === "DELAY").length;
     const onSchedule = groupedWeekly.filter(
-      (d) => d.status === "ON SCHEDULE"
+      (d) => d.status === "ON SCHEDULE",
     ).length;
     setSummary({ delay, onSchedule });
   }, [groupedWeekly]);
@@ -498,7 +808,7 @@ export default function WeeklyDashboard() {
     // download
     XLSX.writeFile(
       workbook,
-      `Laporan-Mingguan-${weekStart}-sd-${weekEnd}.xlsx`
+      `Laporan-Mingguan-${weekStart}-sd-${weekEnd}.xlsx`,
     );
   };
 
@@ -527,39 +837,97 @@ export default function WeeklyDashboard() {
         <div className="pdf-page">
           <Header>
             <h1>Evaluasi Mingguan Capaian Kinerja</h1>
-            <h2>PNC Branch Jamrud Nilam Mirah</h2>
+            <h2>PNC Pelindo Multi Terminal</h2>
           </Header>
 
           <TopRow>
-            <FilterGroup>
-              <label>Pilih Rentang Tanggal:</label>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "4px",
+              }}
+            >
+              <label style={{ fontWeight: "600" }}>Pilih Tanggal:</label>
 
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
 
-              <span style={{ margin: "0 10px" }}>s/d</span>
+                <span>s/d</span>
 
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-
-              {startDate && endDate && (
-                <div
-                  style={{ marginTop: "8px", opacity: 0.7, fontSize: "12px" }}
-                >
-                  Rentang: {startDate} — {endDate}
-                </div>
-              )}
-            </FilterGroup>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+            </div>
 
             {/* ==========================
-    FILTER TERMINAL
+    FILTER BRANCH
 ========================== */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "4px",
+              }}
+            >
+              <label style={{ fontWeight: "600" }}>Branch:</label>
+
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                style={{
+                  width: "180px",
+                  padding: "8px",
+                  borderRadius: "6px",
+                  border: "1px solid #ccc",
+                  background: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="">Semua Branch</option>
+                <option value="BALIKPAPAN">Balikpapan</option>
+                <option value="BELAWAN">Belawan</option>
+                <option value="BENOA">Benoa</option>
+                <option value="BIMABADAS">Bima Badas</option>
+                <option value="BUMIHARJOBAGENDANG">Bumiharjo Bagendang</option>
+                <option value="DUMAI">Dumai</option>
+                <option value="GRESIK">Gresik</option>
+                <option value="JNM">Jamrud Nilam Mirah</option>
+                <option value="KALIMAS">Kalimas</option>
+                <option value="LEMBAR">Lembar</option>
+                <option value="LHOKSEUMAWELANGSA">Lhokseumawe Langsa</option>
+                <option value="MAKASSAR">Makassar</option>
+                <option value="MALAHAYATIMEULABOH">Malahayati Meulaboh</option>
+                <option value="PAREPAREGARONKONG">Pare Pare Garongkong</option>
+                <option value="SIBOLGA">Sibolga</option>
+                <option value="TANJUNGBALAIKARIMUN">
+                  Tanjung Balai Karimun
+                </option>
+                <option value="TANJUNGEMAS">Tanjung Emas</option>
+                <option value="TANJUNGINTAN">Tanjung Intan</option>
+                <option value="TANJUNGPINANG">Tanjung Pinang</option>
+                <option value="TANJUNGWANGI">Tanjung Wangi</option>
+                <option value="TRISAKTIMEKARPUTIH">Trisakti Mekar Putih</option>
+              </select>
+            </div>
+
+            {/* ==========================
+                    FILTER TERMINAL
+                ========================== */}
             <div
               style={{
                 position: "relative",
@@ -572,23 +940,29 @@ export default function WeeklyDashboard() {
 
               <button
                 type="button"
-                onClick={() => setShowTerminalDropdown(!showTerminalDropdown)}
+                disabled={!selectedBranch}
+                onClick={() =>
+                  selectedBranch &&
+                  setShowTerminalDropdown(!showTerminalDropdown)
+                }
                 style={{
                   width: "180px",
                   padding: "8px",
                   borderRadius: "6px",
                   border: "1px solid #ccc",
-                  background: "#fff",
+                  background: selectedBranch ? "#fff" : "#f2f2f2",
                   textAlign: "left",
-                  cursor: "pointer",
+                  cursor: selectedBranch ? "pointer" : "not-allowed",
+                  color: selectedBranch ? "#000" : "#888",
                 }}
               >
-                {selectedTerminals.length === 0
-                  ? "Semua Terminal"
-                  : `${selectedTerminals.length} dipilih`}
+                {!selectedBranch
+                  ? "Pilih Branch dahulu"
+                  : selectedTerminals.length === 0
+                    ? "Semua Terminal"
+                    : `${selectedTerminals.length} dipilih`}
               </button>
-
-              {showTerminalDropdown && (
+              {showTerminalDropdown && selectedBranch && (
                 <div
                   style={{
                     position: "absolute",
@@ -602,16 +976,13 @@ export default function WeeklyDashboard() {
                     marginTop: "4px",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
                     padding: "8px",
+
+                    // ⬇️ INI KUNCI NYA
+                    maxHeight: "220px",
+                    overflowY: "auto",
                   }}
                 >
-                  {[
-                    "Jamrud Utara",
-                    "Jamrud Selatan",
-                    "Jamrud Barat",
-                    "Nilam",
-                    "Mirah",
-                    "Surabaya Veem",
-                  ].map((terminal) => (
+                  {availableTerminals.map((terminal) => (
                     <label
                       key={terminal}
                       style={{
@@ -634,7 +1005,7 @@ export default function WeeklyDashboard() {
                             ]);
                           } else {
                             setSelectedTerminals(
-                              selectedTerminals.filter((t) => t !== terminal)
+                              selectedTerminals.filter((t) => t !== terminal),
                             );
                           }
                         }}

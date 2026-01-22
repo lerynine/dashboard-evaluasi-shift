@@ -804,6 +804,20 @@ export default function Dashboard() {
     return result;
   }, [overviewBaseData]);
 
+  const calculateRemainingDays = (perencanaanShift, realisasiShift) => {
+    const planned = Number(perencanaanShift || 0);
+    const realized = Number(realisasiShift || 0);
+
+    // total shift setelah delay
+    const totalShift = Math.max(planned, realized);
+
+    const remainingShift = totalShift - realized;
+
+    if (remainingShift <= 0) return 0;
+
+    return Math.ceil(remainingShift / 3); // 3 shift = 1 hari
+  };
+
   return (
     <div
       id="dashboard-content"
@@ -1104,6 +1118,10 @@ export default function Dashboard() {
                         label: "Realisasi Jumlah Shift s.d Sekarang",
                       },
                       { key: "balance", label: "Balance" },
+                      {
+                        key: "remainingDays",
+                        label: "Remaining Days",
+                      },
                       { key: "status", label: "Status" },
                     ].map((col) => (
                       <th key={col.key} onClick={() => handleSort(col.key)}>
@@ -1151,6 +1169,14 @@ export default function Dashboard() {
                               maximumFractionDigits: 2,
                             })
                           : "-"}
+                      </td>
+
+                      <td>
+                        {calculateRemainingDays(
+                          row.perencanaanShift,
+                          row.realisasiShift,
+                        )}{" "}
+                        hari
                       </td>
                       <StatusCell status={row.status}>{row.status}</StatusCell>
                     </tr>

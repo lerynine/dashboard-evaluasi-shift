@@ -66,10 +66,12 @@ export const Header = styled.div`
 
 export const TopRow = styled.div`
   display: flex;
-  gap: 20px;
-  margin-bottom: 25px;
-  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: nowrap;
+  margin-bottom: 16px;
 `;
+
 
 export const FilterGroup = styled.div`
   display: flex;
@@ -88,18 +90,18 @@ export const FilterGroup = styled.div`
 `;
 
 export const StatBox = styled.div`
-  background: ${({ color }) => color || "#ddd"};
-  color: white;
-  padding: 15px 20px;
+  background-color: ${({ color }) => color}20;
+  border-left: 5px solid ${({ color }) => color};
   border-radius: 8px;
-  font-size: 15px;
-  font-weight: bold;
-  min-width: 140px;
+  padding: 8px 10px;
+  color: ${({ color }) => color};
+  font-weight: 600;
+  min-width: 120px; /* sebelumnya 160px */
   text-align: center;
 
   div {
-    font-size: 24px;
-    margin-top: 5px;
+    font-size: 16px; /* sebelumnya 18px */
+    font-weight: 700;
   }
 `;
 

@@ -19,6 +19,26 @@ import {
   CartesianGrid,
 } from "recharts";
 
+const formatDateTime = (val) => {
+  if (!val) return "-";
+
+  // Firestore Timestamp
+  if (val.seconds) {
+    return val.toDate().toLocaleString("id-ID", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
+
+  // JS Date
+  if (val instanceof Date) {
+    return val.toLocaleString("id-ID");
+  }
+
+  // String / number
+  return val;
+};
+
 export default function DetailKegiatan() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -51,44 +71,101 @@ export default function DetailKegiatan() {
     fetchDetail();
   }, [id, navigate]);
 
-  if (loading) {
-    return (
-      <PageWrapper>
-        <TopBar>
-          <MenuButton onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FaBars />
-          </MenuButton>
-        </TopBar>
-        <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
-        <Content>Memuat data...</Content>
-      </PageWrapper>
-    );
-  }
-
+  if (loading) return <Content>Memuat data...</Content>;
   if (!data) return null;
 
-  const chartData = [
-    {
-      name: "Status",
-      completed: data.completed ? 1 : 0,
-    },
-  ];
+  /* ======================
+   STATUS DELAY / ON SCHEDULE
+====================== */
+  const jumlahMuatan = Number(data.jumlahMuatan) || 0;
+  const perencanaanShift = Number(data.perencanaanShift) || 0;
+  const realisasiShift = Number(data.realisasiShift) || 0;
+  const realisasiBongkarMuat = Number(data.realisasiBongkarMuat) || 0;
+
+  const targetPerShift = perencanaanShift ? jumlahMuatan / perencanaanShift : 0;
+
+  const totalTarget = targetPerShift * realisasiShift;
+
+  const status = realisasiBongkarMuat >= totalTarget ? "ON SCHEDULE" : "DELAY";
+
+  const balance = jumlahMuatan - realisasiBongkarMuat;
+
+  /* ======================
+     🔢 PRODUKSI HARIAN
+  ====================== */
+  const dailyMap = {};
+
+  // ambil semua key createdAt*, termasuk createdAt tanpa index
+  Object.keys(data)
+    .filter((k) => k === "createdAt" || k.startsWith("createdAt"))
+    .forEach((key) => {
+      const idx = key === "createdAt" ? "" : key.replace("createdAt", "");
+      const ts = data[key];
+
+      if (!ts?.toDate) return;
+
+      const rawDate = ts.toDate();
+      if (isNaN(rawDate.getTime())) return;
+
+      // aturan hari kerja 08.00–08.00
+      const workDate = new Date(rawDate);
+      workDate.setHours(workDate.getHours() - 8);
+
+      const dayKey = workDate.toISOString().split("T")[0];
+
+      // 🔥 INI FIX UTAMANYA
+      const completedValue =
+        Number(idx === "" ? data.completed : data[`completed${idx}`]) || 0;
+
+      dailyMap[dayKey] = (dailyMap[dayKey] || 0) + completedValue;
+    });
+
+  const chartData = Object.keys(dailyMap)
+    .sort()
+    .map((day) => ({
+      tanggal: day,
+      produksi: dailyMap[day],
+    }));
+
+  /* ======================
+     📝 KESIMPULAN
+  ====================== */
+  const kesimpulanList = Object.keys(data)
+    .filter(
+      (k) => (k === "keterangan" || k.startsWith("keterangan")) && data[k],
+    )
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    .map((k) => data[k]);
+
+  const calculateRemainingDays = (perencanaanShift, realisasiShift) => {
+    const planned = Number(perencanaanShift || 0);
+    const realized = Number(realisasiShift || 0);
+
+    // total shift setelah delay
+    const totalShift = Math.max(planned, realized);
+
+    const remainingShift = totalShift - realized;
+    if (remainingShift <= 0) return 0;
+
+    return Math.ceil(remainingShift / 3); // 3 shift = 1 hari
+  };
+
+  const remainingDays = calculateRemainingDays(
+    perencanaanShift,
+    realisasiShift,
+  );
 
   return (
     <PageWrapper>
-      {/* TOP BAR */}
       <TopBar>
         <MenuButton onClick={() => setSidebarOpen(!sidebarOpen)}>
           <FaBars />
         </MenuButton>
       </TopBar>
 
-      {/* SIDEBAR */}
       <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
 
-      {/* CONTENT */}
       <Content>
-        {/* HEADER */}
         <HeaderRow>
           <h2>Detail Kegiatan Kapal</h2>
           <BackButton onClick={() => navigate(-1)}>
@@ -96,70 +173,110 @@ export default function DetailKegiatan() {
           </BackButton>
         </HeaderRow>
 
-        {/* INFO UTAMA */}
+        {/* ======================
+           INFO UTAMA (2 KOLOM)
+        ====================== */}
         <GridTwo>
           <Card>
             <CardTitle>Informasi Kapal</CardTitle>
-
             <Info label="Nama Kapal" value={data.namaKapal} />
-            <Info label="Branch" value={data.branch} />
-            <Info label="Terminal" value={data.terminal} />
-            {data.tambatan && (
-              <Info label="Tambatan" value={data.tambatan} />
-            )}
-            <Info label="Shift" value={data.shift} />
-            <Info label="Dispatcher" value={data.dispatcherName} />
-            <Info
-              label="Status"
-              value={data.completed ? "SELESAI" : "BERJALAN"}
-              badge
-            />
+            <Info label="Agent / Stev" value={data.agentStevedore} />
+            <Info label="SPMK" value={data.spmk} />
+            <Info label="PPK" value={data.ppk} />
+            <Info label="Komoditi" value={data.jenisBarang} />
+            <Info label="Total Muatan" value={data.jumlahMuatan} />
+            <Info label="Status" value={status} badge />
           </Card>
 
-          <Card center>
-            <img
-              src="/images/kapal-side.png"
-              alt="Kapal"
-              style={{ maxWidth: "100%", height: "auto" }}
-            />
+          <Card>
+            <CardTitle>Informasi Sandar</CardTitle>
+            <Info label="Terminal" value={data.terminal} />
+            <Info label="Tambatan" value={data.tambatan} />
+            <Info label="ETB" value={formatDateTime(data.etb)} />
+            <Info label="ETD" value={formatDateTime(data.etd)} />
+            <Info label="First Line" value={formatDateTime(data.firstLine)} />
+            <Info label="First D/L" value={formatDateTime(data.startDL)} />
           </Card>
         </GridTwo>
 
-        {/* DETAIL MUATAN */}
+        {/* ======================
+           REALISASI
+        ====================== */}
         <Card>
-          <CardTitle>Detail Bongkar Muat</CardTitle>
+          <CardTitle>Produksi</CardTitle>
 
-          <GridThree>
-            <Info label="Jenis Barang" value={data.jenisBarang} />
-            <Info label="Jenis Kemasan" value={data.jenisKemasan} />
-            <Info label="Jumlah Muatan" value={data.jumlahMuatan} />
+          <GridFour>
             <Info
-              label="Realisasi B/M"
-              value={data.realisasiBongkarMuat}
+              label="Realisasi Bongkar/Muat"
+              value={realisasiBongkarMuat.toLocaleString()}
+              center
+              big
             />
-            <Info label="Perencanaan Shift" value={data.perencanaanShift} />
-            <Info label="Realisasi Shift" value={data.realisasiShift} />
-          </GridThree>
+
+            <Info
+              label="Perencanaan Shift"
+              value={perencanaanShift}
+              center
+              big
+            />
+
+            <Info
+              label="Realisasi Jumlah Shift"
+              value={realisasiShift}
+              center
+              big
+            />
+
+            <Info
+              label="Balance"
+              value={balance.toLocaleString()}
+              badge
+              center
+              big
+            />
+
+            <Info
+              label="Remaining Days"
+              value={`${remainingDays} hari`}
+              badge
+              center
+              big
+            />
+          </GridFour>
         </Card>
 
-        {/* GRAFIK */}
+        {/* ======================
+           GRAFIK PRODUKSI
+        ====================== */}
         <Card>
-          <CardTitle>Status Penyelesaian</CardTitle>
-
-          <ResponsiveContainer width="100%" height={260}>
+          <CardTitle>Produksi Harian</CardTitle>
+          <ResponsiveContainer width="100%" height={280}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis ticks={[0, 1]} />
+              <XAxis dataKey="tanggal" />
+              <YAxis />
               <Tooltip />
               <Line
                 type="monotone"
-                dataKey="completed"
+                dataKey="produksi"
                 stroke="#0B5ED7"
                 strokeWidth={3}
               />
             </LineChart>
           </ResponsiveContainer>
+        </Card>
+
+        {/* ======================
+           KESIMPULAN
+        ====================== */}
+        <Card>
+          <CardTitle>Remark Kegiatan</CardTitle>
+          <ul>
+            {kesimpulanList.length === 0 && <li>-</li>}
+            {kesimpulanList.map((k, i) => (
+              <li key={i}>{k}</li>
+            ))}
+          </ul>
         </Card>
       </Content>
     </PageWrapper>
@@ -169,13 +286,31 @@ export default function DetailKegiatan() {
 /* =========================
    KOMPONEN KECIL
 ========================= */
-function Info({ label, value, badge }) {
+function Info({ label, value, badge, center = false, big = false }) {
   return (
-    <div>
-      <SmallLabel>{label}</SmallLabel>
+    <div
+      style={{
+        textAlign: center ? "center" : "left",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: center ? "center" : "flex-start",
+      }}
+    >
+      <SmallLabel
+        style={{
+          fontSize: big ? "14px" : undefined,
+        }}
+      >
+        {label}
+      </SmallLabel>
+
       <Value
         badge={badge}
         status={value}
+        style={{
+          fontSize: big ? "20px" : undefined,
+          fontWeight: big ? 700 : undefined,
+        }}
       >
         {value || "-"}
       </Value>
@@ -275,6 +410,12 @@ const GridThree = styled.div`
   gap: 16px;
 `;
 
+const GridFour = styled.div`
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+`;
+
 const SmallLabel = styled.div`
   font-size: 12px;
   color: #6c757d;
@@ -282,10 +423,24 @@ const SmallLabel = styled.div`
 
 const Value = styled.div`
   font-weight: 600;
-  color: ${({ badge, status }) =>
-    badge
-      ? status === "SELESAI"
-        ? "#198754"
-        : "#ffc107"
-      : "#212529"};
+  padding: ${(p) => (p.badge ? "4px 10px" : "0")};
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 13px;
+
+  ${(p) =>
+    p.badge &&
+    p.status === "DELAY" &&
+    `
+      background: #fde2e2;
+      color: #b42318;
+    `}
+
+  ${(p) =>
+    p.badge &&
+    p.status === "ON SCHEDULE" &&
+    `
+      background: #dcfce7;
+      color: #15803d;
+    `}
 `;
