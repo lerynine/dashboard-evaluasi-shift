@@ -127,6 +127,7 @@ const InputGroup = styled.div`
     border-radius: 6px;
     border: 1px solid #ccc;
     font-size: 14px;
+    box-sizing: border-box; /* 🔑 INI KUNCINYA */
   }
 `;
 

@@ -2,36 +2,65 @@
 import styled from "styled-components";
 import {
   FaTachometerAlt,
-  FaPlusCircle,
-  FaFileAlt,
   FaChartBar,
-  FaShip, // ⬅️ TAMBAH INI
+  FaShip,
+  FaSignOutAlt,
+  FaUserCircle,
 } from "react-icons/fa";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { getAuth, signOut } from "firebase/auth";
+import { useEffect, useState } from "react";
+import { FaListOl } from "react-icons/fa";
 
-export default function Sidebar({ open, setOpen }) {
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
+
+export default function Sidebar({ open, setOpen, user }) {
+  const auth = getAuth();
+  const firebaseUser = auth.currentUser;
+  const navigate = useNavigate();
+
+  const [userData, setUserData] = useState(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      if (!firebaseUser) return;
+
+      const q = query(
+        collection(db, "users"),
+        where("uid", "==", firebaseUser.uid),
+      );
+
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        // ambil user pertama (harusnya cuma 1)
+        setUserData(snap.docs[0].data());
+      }
+    };
+
+    fetchUser();
+  }, [firebaseUser]);
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    navigate("/login");
+  };
+
   return (
     <SidebarContainer open={open}>
+      {/* LOGO */}
       <Brand>
-        <img
-          src="/images/spmt-logo.png"
-          alt="SPMT Logo"
-          style={{
-            width: "150px",
-            height: "auto",
-            objectFit: "contain",
-          }}
-        />
+        <img src="/images/spmt-logo.png" alt="SPMT Logo" />
       </Brand>
 
+      {/* MENU */}
       <NavList>
-        {/* Menu Dashboard */}
         <StyledNavLink to="/dashboard" onClick={() => setOpen(false)}>
           <FaTachometerAlt />
           <span>Dashboard</span>
         </StyledNavLink>
 
-        {/* ⭐ Menu Weekly Dashboard (Baru) */}
         <StyledNavLink to="/weekly" onClick={() => setOpen(false)}>
           <FaChartBar />
           <span>Weekly</span>
@@ -41,13 +70,38 @@ export default function Sidebar({ open, setOpen }) {
           <FaShip />
           <span>Input</span>
         </StyledNavLink>
+
+        {/* MENU BARU */}
+        <StyledNavLink to="/sequence" onClick={() => setOpen(false)}>
+          <FaListOl />
+          <span>Sequence</span>
+        </StyledNavLink>
       </NavList>
+
+      {/* ⬇️ BAGIAN BAWAH */}
+      <BottomSection>
+        {/* USER INFO */}
+        <UserBox>
+          <FaUserCircle />
+          <div>
+            <div className="name">{userData?.nama || "-"}</div>
+            <div className="meta">
+              {userData?.nipp || "-"} • {userData?.branch || "-"}
+            </div>
+          </div>
+        </UserBox>
+
+        {/* LOGOUT */}
+        <LogoutButton onClick={handleLogout}>
+          <FaSignOutAlt />
+          Logout
+        </LogoutButton>
+      </BottomSection>
     </SidebarContainer>
   );
 }
 
 /* ==================== STYLED COMPONENTS ==================== */
-
 const SidebarContainer = styled.aside`
   position: fixed;
   top: 60px;
@@ -58,22 +112,17 @@ const SidebarContainer = styled.aside`
   color: white;
   display: flex;
   flex-direction: column;
-  padding-top: 0;
   transition: all 0.3s ease;
   z-index: 100;
-  box-shadow: ${({ open }) =>
-    open ? "4px 0 15px rgba(0, 0, 0, 0.3)" : "none"};
 `;
 
 const Brand = styled.div`
-  background-color: #fff;
+  background: #fff;
   text-align: center;
   padding: 15px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 
   img {
-    display: block;
-    margin: 0 auto;
+    width: 150px;
   }
 `;
 
@@ -87,24 +136,67 @@ const StyledNavLink = styled(NavLink)`
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 12px 20px;
   color: white;
   text-decoration: none;
-  padding: 12px 20px;
   font-size: 15px;
-  font-weight: 500;
-  transition: all 0.2s ease;
 
   &.active {
-    background-color: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.15);
     color: #0bda51;
   }
 
   &:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.1);
+    color: #0bda51;
+  }
+`;
+
+const BottomSection = styled.div`
+  margin-top: auto;
+  padding: 15px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+`;
+
+const UserBox = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+
+  svg {
+    font-size: 28px;
     color: #0bda51;
   }
 
-  svg {
-    font-size: 18px;
+  .name {
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .meta {
+    font-size: 12px;
+    opacity: 0.8;
+  }
+`;
+
+const LogoutButton = styled.button`
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #d62828;
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+
+  &:hover {
+    background: #b71c1c;
   }
 `;

@@ -9,6 +9,8 @@ import WeeklyDashboard from "./pages/WeeklyDashboard";
 import KegiatanList from "./pages/KegiatanList";
 import DetailKegiatan from "./pages/DetailKegiatan";
 import UpdateKegiatan from "./pages/UpdateKegiatan"; // ⭐ TAMBAHAN
+import SequencePlannerList from "./pages/SequencePlannerList";
+import PlannerForm from "./pages/PlannerForm";
 
 import { PrivateRoute } from "./PrivateRoute";
 
@@ -84,6 +86,26 @@ function App() {
         element={
           <PrivateRoute>
             <WeeklyDashboard />
+          </PrivateRoute>
+        }
+      />
+
+      {/* ⭐ SEQUENCE PLANNER */}
+<Route
+  path="/sequence"
+  element={
+    <PrivateRoute>
+      <SequencePlannerList />
+    </PrivateRoute>
+  }
+/>
+
+      {/* ⭐ PLANNER FORM */}
+      <Route
+        path="/planner/:id"
+        element={
+          <PrivateRoute>
+            <PlannerForm />
           </PrivateRoute>
         }
       />

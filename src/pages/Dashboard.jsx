@@ -15,7 +15,6 @@ import Sidebar from "../components/Sidebar";
 import { FaBars, FaTimes } from "react-icons/fa";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
-import html2pdf from "html2pdf.js";
 import { useNavigate } from "react-router-dom";
 
 const toNumber = (val) => {
@@ -156,6 +155,7 @@ const BRANCH_TERMINALS = {
     "DERMAGA UMUM PENUMPANG",
     "DERMAGA UMUM PT. GRESIK JASA TAMA",
     "DERMAGA UMUM TALUD TEGAK KONVENSIONAL",
+    "DERMAGA UMUM TALUD TEGAK FIX CRANE",
     "RUANG TUNGGU KENDARAAN 01",
     "RUANG TUNGGU PENUMPANG 01",
   ],
@@ -338,7 +338,7 @@ const BRANCH_TERMINALS = {
   ],
 };
 
-// 🧩 Helper function: parsing "MM/DD/YYYY HH:mm:ss" jadi Date valid
+// Helper function: parsing "MM/DD/YYYY HH:mm:ss" jadi Date valid
 function parseCustomDate(str) {
   if (!str) return new Date(0);
   const s = String(str).trim();
@@ -475,6 +475,7 @@ export default function Dashboard() {
           maximumFractionDigits: 2,
         });
   };
+  
   useEffect(() => {
     const fetchData = async () => {
       console.log("📡 Mulai ambil data dari Firestore dan Google Sheet...");
@@ -735,6 +736,7 @@ export default function Dashboard() {
 
   const isJNM = selectedBranch === "JNM";
   const isGresik = selectedBranch === "GRESIK";
+  const totalKapal = filteredData.length;
 
   const BRANCH_LABEL = {
     JNM: "Jamrud Nilam Mirah",
@@ -952,6 +954,10 @@ export default function Dashboard() {
                         marginTop: "4px",
                         boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
                         padding: "8px",
+
+                        /* 🔽 TAMBAHKAN INI */
+                        maxHeight: "220px", // bebas: 200–300px enak
+                        overflowY: "auto",
                       }}
                     >
                       {(BRANCH_TERMINALS[selectedBranch] || []).map(
@@ -1018,6 +1024,10 @@ export default function Dashboard() {
                 alignItems: "stretch",
               }}
             >
+              <StatBox color="#0077B6">
+                Jumlah Kapal
+                <div>{totalKapal}</div>
+              </StatBox>
               <StatBox color="#D62828">
                 Delay
                 <div>{summary.delay}</div>
@@ -1272,6 +1282,140 @@ export default function Dashboard() {
             </div>
           )}
 
+        {/* 🔹 LAYOUT GRESIK */}
+        {isGresik && (
+          <div className="pdf-page no-break">
+            {/* DERMAGA IBL SISI LUAR */}
+            {(selectedTerminals.length === 0 ||
+              selectedTerminals.some((t) =>
+                t.startsWith("DERMAGA IBL SISI DALAM"),
+              )) && (
+              <div className="section no-break">
+                <IblLuarLayout
+                  data={filteredData.filter((d) =>
+                    d.terminal.startsWith("DERMAGA IBL SISI DALAM"),
+                  )}
+                  selectedTerminals={selectedTerminals}
+                />
+              </div>
+            )}
+
+            {/* DERMAGA IBL SISI DALAM */}
+            {(selectedTerminals.length === 0 ||
+              selectedTerminals.some((t) =>
+                t.startsWith("DERMAGA UMUM IBL SISI LUAR"),
+              )) && (
+              <div className="section no-break">
+                <IblDalamLayout
+                  data={filteredData.filter((d) =>
+                    d.terminal.startsWith("DERMAGA UMUM IBL SISI LUAR"),
+                  )}
+                  selectedTerminals={selectedTerminals}
+                />
+              </div>
+            )}
+
+            {/* DERMAGA 265 */}
+            {(selectedTerminals.length === 0 ||
+              selectedTerminals.some((t) => t.startsWith("DERMAGA 265"))) && (
+              <div className="section no-break">
+                <Dermaga265Layout
+                  data={filteredData.filter((d) =>
+                    d.terminal.startsWith("DERMAGA 265"),
+                  )}
+                  selectedTerminals={selectedTerminals}
+                />
+              </div>
+            )}
+
+            {/* DERMAGA 70 */}
+            {(selectedTerminals.length === 0 ||
+              selectedTerminals.some((t) => t.startsWith("DERMAGA 70"))) && (
+              <div className="section no-break">
+                <Dermaga70Layout
+                  data={filteredData.filter((d) =>
+                    d.terminal.startsWith("DERMAGA 70"),
+                  )}
+                  selectedTerminals={selectedTerminals}
+                />
+              </div>
+            )}
+
+            {/* DERMAGA UMUM TALUD TEGAK KONVENSIONAL */}
+            {(selectedTerminals.length === 0 ||
+              selectedTerminals.some((t) =>
+                t.startsWith("DERMAGA UMUM TALUD TEGAK KONVENSIONAL"),
+              )) && (
+              <div className="section no-break">
+                <TaludTegakKonvensionalLayout
+                  data={filteredData.filter((d) =>
+                    d.terminal.startsWith(
+                      "DERMAGA UMUM TALUD TEGAK KONVENSIONAL",
+                    ),
+                  )}
+                  selectedTerminals={selectedTerminals}
+                />
+              </div>
+            )}
+
+            {/* DERMAGA UMUM TALUD TEGAK FIX CRANE */}
+            {(selectedTerminals.length === 0 ||
+              selectedTerminals.some((t) =>
+                t.startsWith("DERMAGA UMUM TALUD TEGAK FIX CRANE"),
+              )) && (
+              <div className="section no-break">
+                <TaludTegakFixCraneLayout
+                  data={filteredData.filter((d) =>
+                    d.terminal.startsWith("DERMAGA UMUM TALUD TEGAK FIX CRANE"),
+                  )}
+                  selectedTerminals={selectedTerminals}
+                />
+              </div>
+            )}
+
+            {/* DERMAGA TALUD TEGAK SISI DALAM */}
+            {(selectedTerminals.length === 0 ||
+              selectedTerminals.some((t) =>
+                t.startsWith("DERMAGA TALUD TEGAK SISI DALAM"),
+              )) && (
+              <div className="section no-break">
+                <TaludTegakSisiDalamLayout
+                  data={filteredData.filter((d) =>
+                    d.terminal.startsWith("DERMAGA TALUD TEGAK SISI DALAM"),
+                  )}
+                  selectedTerminals={selectedTerminals}
+                />
+              </div>
+            )}
+
+            {/* DERMAGA 78 */}
+            {(selectedTerminals.length === 0 ||
+              selectedTerminals.some((t) => t.startsWith("DERMAGA 78"))) && (
+              <div className="section no-break">
+                <Dermaga78Layout
+                  data={filteredData.filter((d) =>
+                    d.terminal.startsWith("DERMAGA 78"),
+                  )}
+                  selectedTerminals={selectedTerminals}
+                />
+              </div>
+            )}
+
+            {/* DERMAGA UMUM PT. GRESIK JASA TAMA */}
+            {(selectedTerminals.length === 0 ||
+              selectedTerminals.some((t) => t.startsWith("DERMAGA UMUM PT. GRESIK JASA TAMA"))) && (
+              <div className="section no-break">
+                <GresikJasaTamaLayout
+                  data={filteredData.filter((d) =>
+                    d.terminal.startsWith("DERMAGA UMUM PT. GRESIK JASA TAMA"),
+                  )}
+                  selectedTerminals={selectedTerminals}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 🔹 Tabel baru di bawah layout */}
         <div className="pdf-page">
           <div style={{ marginTop: "40px" }}>
@@ -1379,6 +1523,9 @@ export default function Dashboard() {
 }
 
 const QuayLayout = ({ data = [] }) => {
+  const today = new Date().toISOString().split("T")[0];
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
   const tambatan = [
     { id: 1, posisi: "top", nama: "N/A" },
     { id: 2, posisi: "top", nama: "N/A" },
@@ -1451,7 +1598,17 @@ const QuayLayout = ({ data = [] }) => {
           (terminal === "surabaya veem" && t.posisi === "right");
 
         const cocokTambatan = berth.includes(t.id.toString());
-        return cocokTerminal && cocokTambatan;
+
+        // 🔹 LOGIKA BARU
+        const tanggalData = parseCustomDate(d.tanggal || d.createdAt);
+
+        const isInDateRange =
+          (!startDate || tanggalData >= new Date(startDate)) &&
+          (!endDate || tanggalData <= new Date(endDate + " 23:59:59"));
+
+        const isAktif = d.status === true;
+
+        return cocokTerminal && cocokTambatan && (isInDateRange || isAktif);
       });
 
       if (matches.length > 0) {
@@ -1495,7 +1652,7 @@ const QuayLayout = ({ data = [] }) => {
         etbetd: latest ? latest.etbetd : null,
       };
     });
-  }, [data]);
+  }, [data, startDate, endDate]);
 
   return (
     <div style={{ textAlign: "center", marginTop: "50px" }}>
@@ -1698,6 +1855,9 @@ const NilamLayout = ({ data = [], selectedTerminals = [] }) => {
     { id: 5, nama: "N/A" },
     { id: 6, nama: "N/A" },
   ];
+  const today = new Date().toISOString().split("T")[0];
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
 
   // 🧠 Tentukan sisi mana yang perlu ditampilkan
   const showSelatan =
@@ -1711,25 +1871,64 @@ const NilamLayout = ({ data = [], selectedTerminals = [] }) => {
     selectedTerminals.some((t) => t.toLowerCase() === "nilam");
 
   const updatedTambatan = useMemo(() => {
+    function parseCustomDate(d) {
+      if (!d) return new Date(0);
+      if (d instanceof Date) return d;
+
+      const str = String(d).trim();
+
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}/.test(str)) return new Date(str);
+
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+        const [datePart, timePart = "00:00:00"] = str.split(" ");
+        const [y, m, d2] = datePart.split("-").map(Number);
+        const [hh, mm, ss] = timePart.split(":").map(Number);
+        return new Date(y, m - 1, d2, hh, mm, ss);
+      }
+
+      return new Date(0);
+    }
+
     return tambatanNilam.map((t) => {
-      const match = data.find((d) => {
+      const matches = data.filter((d) => {
         const berth = (d.tambatan || "").trim().toLowerCase();
         const terminal = (d.terminal || "").toLowerCase();
 
-        return terminal.includes("nilam") && berth.includes(t.id.toString());
+        if (!terminal.includes("nilam")) return false;
+        if (!berth.includes(t.id.toString())) return false;
+
+        const tanggalData = parseCustomDate(d.tanggal || d.createdAt);
+
+        const isInDateRange =
+          (!startDate || tanggalData >= new Date(startDate)) &&
+          (!endDate || tanggalData <= new Date(endDate + " 23:59:59"));
+
+        const isAktif = d.status === true;
+
+        return isInDateRange || isAktif;
       });
+
+      // 🔹 pilih data TERBARU
+      const latest = matches.reduce((acc, curr) => {
+        if (!acc) return curr;
+
+        const a = parseCustomDate(acc.tanggal || acc.createdAt);
+        const b = parseCustomDate(curr.tanggal || curr.createdAt);
+
+        return b > a ? curr : acc;
+      }, null);
 
       return {
         ...t,
-        nama: match ? match.namaKapal : "N/A",
-        jumlahMuatan: match ? match.jumlahMuatan : null,
-        perencanaanShift: match ? match.perencanaanShift : null,
-        balance: match ? match.balance : null,
-        status: match ? match.status : null,
-        etbetd: match ? match.etbetd : null,
+        nama: latest ? latest.namaKapal : "N/A",
+        jumlahMuatan: latest ? latest.jumlahMuatan : null,
+        perencanaanShift: latest ? latest.perencanaanShift : null,
+        balance: latest ? latest.balance : null,
+        status: latest ? latest.status : null,
+        etbetd: latest ? latest.etbetd : null,
       };
     });
-  }, [data]);
+  }, [data, startDate, endDate]);
 
   return (
     <div style={{ textAlign: "center", marginTop: "50px" }}>
@@ -1845,7 +2044,9 @@ const MirahLayout = ({ data = [], selectedTerminals = [] }) => {
     { id: 5, posisi: "right", nama: "N/A" },
     { id: 6, posisi: "right", nama: "N/A" },
   ];
-
+  const today = new Date().toISOString().split("T")[0];
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
   // 🧭 Tentukan sisi mana yang tampil
   const showSelatan =
     selectedTerminals.length === 0 ||
@@ -1856,27 +2057,69 @@ const MirahLayout = ({ data = [], selectedTerminals = [] }) => {
     selectedTerminals.length === 0 ||
     selectedTerminals.some((t) => t.toLowerCase().includes("mirah timur")) ||
     selectedTerminals.some((t) => t.toLowerCase() === "mirah");
-
-  // 🧩 Mapping data kapal dari Firestore
+  // 🧩 Mapping data kapal dari Firestore (MIRAH)
   const updatedTambatan = useMemo(() => {
+    function parseCustomDate(d) {
+      if (!d) return new Date(0);
+      if (d instanceof Date) return d;
+
+      const str = String(d).trim();
+
+      // ISO
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}/.test(str)) return new Date(str);
+
+      // YYYY-MM-DD HH:mm:ss
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+        const [datePart, timePart = "00:00:00"] = str.split(" ");
+        const [y, m, d2] = datePart.split("-").map(Number);
+        const [hh, mm, ss] = timePart.split(":").map(Number);
+        return new Date(y, m - 1, d2, hh, mm, ss);
+      }
+
+      return new Date(0);
+    }
+
     return tambatanMirah.map((t) => {
-      const match = data.find((d) => {
+      const matches = data.filter((d) => {
         const berth = (d.tambatan || "").trim().toLowerCase();
         const terminal = (d.terminal || "").toLowerCase();
-        return terminal.includes("mirah") && berth.includes(t.id.toString());
+
+        if (!terminal.includes("mirah")) return false;
+        if (!berth.includes(t.id.toString())) return false;
+
+        const tanggalData = parseCustomDate(d.tanggal || d.createdAt);
+
+        const isInDateRange =
+          (!startDate || tanggalData >= new Date(startDate)) &&
+          (!endDate || tanggalData <= new Date(endDate + " 23:59:59"));
+
+        const isAktif = d.status === true;
+
+        // ✅ masuk jika cocok tanggal ATAU status aktif
+        return isInDateRange || isAktif;
       });
+
+      // 🔹 pilih data TERBARU
+      const latest = matches.reduce((acc, curr) => {
+        if (!acc) return curr;
+
+        const a = parseCustomDate(acc.tanggal || acc.createdAt);
+        const b = parseCustomDate(curr.tanggal || curr.createdAt);
+
+        return b > a ? curr : acc;
+      }, null);
 
       return {
         ...t,
-        nama: match ? match.namaKapal : "N/A",
-        jumlahMuatan: match ? match.jumlahMuatan : null,
-        perencanaanShift: match ? match.perencanaanShift : null,
-        balance: match ? match.balance : null,
-        status: match ? match.status : null,
-        etbetd: match ? match.etbetd : null,
+        nama: latest ? latest.namaKapal : "N/A",
+        jumlahMuatan: latest ? latest.jumlahMuatan : null,
+        perencanaanShift: latest ? latest.perencanaanShift : null,
+        balance: latest ? latest.balance : null,
+        status: latest ? latest.status : null,
+        etbetd: latest ? latest.etbetd : null,
       };
     });
-  }, [data]);
+  }, [data, startDate, endDate]);
 
   return (
     <div style={{ textAlign: "center", marginTop: "50px" }}>

@@ -15,6 +15,7 @@ export default function UpdateKegiatan() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updateIndex, setUpdateIndex] = useState(1);
+  const [statusKegiatan, setStatusKegiatan] = useState("");
 
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -66,13 +67,38 @@ export default function UpdateKegiatan() {
   };
 
   const handleSubmit = async () => {
+    // 🔴 VALIDASI WAJIB
+    const wajibDiisi = [
+      "shift",
+      "realisasiTgh",
+      "ketercapaian",
+      "realisasiBongkarMuat",
+      "completed",
+      "realisasiShift",
+      "notTime",
+      "idleTime",
+      "effectiveTime",
+      "keterangan",
+    ];
+
+    for (const key of wajibDiisi) {
+      if (!form[key]) {
+        alert("Semua field wajib diisi");
+        return;
+      }
+    }
+
+    if (!statusKegiatan) {
+      alert("❗ Silakan pilih status kegiatan (Selesai / Belum)");
+      return;
+    }
+
     try {
       setUploading(true);
       const ref = doc(db, "laporan", id);
 
       let lampiranUrl = null;
-
-      // 🔹 UPLOAD KE CLOUDINARY (OPTIONAL)
+      
       if (file) {
         const fd = new FormData();
         fd.append("file", file);
@@ -89,7 +115,6 @@ export default function UpdateKegiatan() {
         lampiranUrl = res.data.secure_url;
       }
 
-      // 🔹 PAYLOAD UPDATE HARIAN
       const payload = {
         [`createdAt${updateIndex}`]: Timestamp.now(),
         [`shift${updateIndex}`]: form.shift,
@@ -105,7 +130,9 @@ export default function UpdateKegiatan() {
         [`effectiveTime${updateIndex}`]: Number(form.effectiveTime),
         [`keterangan${updateIndex}`]: form.keterangan,
 
-        // ✅ SIMPAN LINK CLOUDINARY
+        // ✅ JIKA SELESAI → status false
+        ...(statusKegiatan === "SELESAI" && { status: false }),
+
         ...(lampiranUrl && {
           [`lampiran${updateIndex}`]: [lampiranUrl],
         }),
@@ -163,20 +190,38 @@ export default function UpdateKegiatan() {
               <label>Shift</label>
               <select name="shift" value={form.shift} onChange={handleChange}>
                 <option value="">Pilih Shift</option>
-                <option value="I (08.00 - 16.00)">Shift I (08.00 - 16.00)</option>
-                <option value="II (16.00 - 00.00)">Shift II (16.00 - 00.00)</option>
-                <option value="III (00.00 - 08.00)">Shift III (00.00 - 08.00)</option>
+                <option value="I (08.00 - 16.00)">
+                  Shift I (08.00 - 16.00)
+                </option>
+                <option value="II (16.00 - 00.00)">
+                  Shift II (16.00 - 00.00)
+                </option>
+                <option value="III (00.00 - 08.00)">
+                  Shift III (00.00 - 08.00)
+                </option>
               </select>
             </Field>
 
             <Field>
               <label>Realisasi TGH</label>
-              <input name="realisasiTgh" onChange={handleChange} />
+              <input
+                name="realisasiTgh"
+                value={form.realisasiTgh}
+                onChange={handleChange}
+              />
             </Field>
 
             <Field>
               <label>Ketercapaian</label>
-              <input name="ketercapaian" onChange={handleChange} />
+              <select
+                name="ketercapaian"
+                value={form.ketercapaian}
+                onChange={handleChange}
+              >
+                <option value="">Pilih</option>
+                <option value="TERCAPAI">TERCAPAI</option>
+                <option value="TIDAK TERCAPAI">TIDAK TERCAPAI</option>
+              </select>
             </Field>
           </Row>
 
@@ -234,6 +279,33 @@ export default function UpdateKegiatan() {
             <textarea name="keterangan" onChange={handleChange} />
           </Field>
 
+          <Field>
+            <label>Status Kegiatan Kapal</label>
+
+            <div style={{ display: "flex", gap: "24px", marginTop: "8px" }}>
+              <label>
+                <input
+                  type="radio"
+                  name="statusKegiatan"
+                  value="SELESAI"
+                  checked={statusKegiatan === "SELESAI"}
+                  onChange={(e) => setStatusKegiatan(e.target.value)}
+                />
+                Selesai
+              </label>
+
+              <label>
+                <input
+                  type="radio"
+                  name="statusKegiatan"
+                  value="BELUM"
+                  checked={statusKegiatan === "BELUM"}
+                  onChange={(e) => setStatusKegiatan(e.target.value)}
+                />
+                Belum
+              </label>
+            </div>
+          </Field>
           <Field>
             <label>Lampiran Dokumentasi</label>
             <input

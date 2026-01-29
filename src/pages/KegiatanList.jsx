@@ -7,6 +7,8 @@ import styled from "styled-components";
 
 import Sidebar from "../components/Sidebar";
 import { FaBars, FaPlus, FaEdit } from "react-icons/fa";
+import { getAuth } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 /* ==================== PAGE ==================== */
 
@@ -15,19 +17,80 @@ export default function KegiatanList() {
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
+  const auth = getAuth();
+  const user = auth.currentUser;
 
   useEffect(() => {
     const fetchData = async () => {
-      const q = query(collection(db, "laporan"), where("status", "==", true));
+      try {
+        setLoading(true);
 
-      const snap = await getDocs(q);
-      const data = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+        const auth = getAuth();
+        const firebaseUser = auth.currentUser;
 
-      setList(data);
-      setLoading(false);
+        if (!firebaseUser) {
+          setList([]);
+          return;
+        }
+
+        // 🔹 ambil data user berdasarkan field uid
+        const userQuery = query(
+          collection(db, "users"),
+          where("uid", "==", firebaseUser.uid),
+        );
+
+        const userSnap = await getDocs(userQuery);
+
+        if (userSnap.empty) {
+          console.warn("User tidak ditemukan di collection users");
+          setList([]);
+          return;
+        }
+
+        const userBranch = userSnap.docs[0].data().branch;
+
+        // 🔹 build query dinamis
+        let laporanQuery;
+
+        if (!userBranch) {
+          console.log("User master — ambil semua laporan");
+
+          laporanQuery = query(
+            collection(db, "laporan"),
+            where("status", "==", true),
+          );
+        } else {
+          console.log("User branch:", userBranch);
+
+          laporanQuery = query(
+            collection(db, "laporan"),
+            where("status", "==", true),
+            where("branch", "==", userBranch),
+          );
+        }
+
+        const snap = await getDocs(laporanQuery);
+
+        const data = snap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        setList(data);
+
+        // 🔹 query laporan sesuai branch user
+        laporanQuery = query(
+          collection(db, "laporan"),
+          where("status", "==", true),
+          where("branch", "==", userBranch),
+        );
+
+        setList(data);
+      } catch (err) {
+        console.error("Fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchData();
