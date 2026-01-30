@@ -5,22 +5,67 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import styled from "styled-components";
 
-/* ==================================================
-   PLANNER FORM (VERSI AWAL / DASAR)
-   Target:
-   - Mirip konsep CWP PDF
-   - Pelan-pelan dibangun
-   ================================================== */
+function generateSchedule({
+  selectedHolds,
+  holdBL,
+  dischRate,
+  totalGang,
+  commDisch,
+}) {
+  if (!dischRate || !totalGang) return [];
 
-const generateHours = () => {
-  const hours = [];
-  for (let i = 0; i < 24; i++) {
-    hours.push(`${String(i).padStart(2, "0")}:00`);
+  const ratePerGang = dischRate / totalGang;
+
+  // offset start hour berdasarkan ETC
+  const baseHour = commDisch ? commDisch.getHours() : 0;
+
+  let time = 0;
+  let queue = [...selectedHolds];
+  let active = [];
+  let schedule = [];
+
+  while (queue.length > 0 || active.length > 0) {
+    while (active.length < totalGang && queue.length > 0) {
+      const hold = queue.shift();
+      const bl = Number(holdBL[hold] || 0);
+      const duration = Math.max(1, Math.ceil(bl / ratePerGang));
+
+      active.push({
+        hold,
+        remaining: duration,
+        start: time,
+        duration,
+      });
+    }
+
+    active.forEach((job) => {
+      job.remaining -= 1;
+    });
+
+    time++;
+
+    active = active.filter((job) => {
+      if (job.remaining <= 0) {
+        schedule.push({
+          hold: job.hold,
+          startHour: baseHour + job.start,
+          endHour: baseHour + time,
+          duration: job.duration,
+        });
+        return false;
+      }
+      return true;
+    });
   }
-  return hours;
-};
 
-const hours = generateHours();
+  schedule.sort((a, b) => a.startHour - b.startHour);
+  return schedule;
+}
+
+function getActiveHoldAtHour(schedule, hour) {
+  return schedule.find((s) => hour >= s.startHour && hour < s.endHour)?.hold;
+}
+
 const getShift = (hour) => {
   if (hour >= 0 && hour < 8) return "III";
   if (hour >= 8 && hour < 16) return "I";
@@ -39,7 +84,6 @@ const shiftRanges = {
   16: 8,
 };
 
-
 export default function PlannerForm() {
   const { id } = useParams();
 
@@ -48,8 +92,10 @@ export default function PlannerForm() {
 
   // planner input
   const [selectedHolds, setSelectedHolds] = useState([]);
-  const [dischRate, setDischRate] = useState();
-  const [totalGang, setTotalGang] = useState();
+  const [totalGang, setTotalGang] = useState("");
+  const [dischRate, setDischRate] = useState("");
+
+  const [holdBL, setHoldBL] = useState({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -83,18 +129,47 @@ export default function PlannerForm() {
   const comDiscDate = laporan.startDL?.toDate();
 
   // contoh perhitungan dasar
-  const totalDisch = laporan.totalDischarge || 0;
-  const estimatedHour =
-    totalDisch && dischRate && totalGang
-      ? Math.ceil(totalDisch / (dischRate * totalGang))
-      : 0;
+  const totalDisch = laporan.totalDischarge;
 
+  const totalDischarge = Object.keys(laporan)
+    .filter((key) => key.startsWith("completed"))
+    .reduce((sum, key) => sum + (laporan[key] || 0), 0);
+
+  const totalMuatan = Number(laporan.jumlahMuatan);
+
+  const cargoROB = Math.max(totalMuatan - totalDischarge, 0);
+
+  const schedule = generateSchedule({
+    selectedHolds,
+    holdBL,
+    dischRate,
+    totalGang,
+    commDisch: laporan.commDisch?.toDate(),
+  });
+
+  const lastHour = schedule.length
+    ? Math.max(...schedule.map((s) => s.endHour))
+    : 24;
+
+  const hours = Array.from(
+    { length: lastHour },
+    (_, i) => `${String(i % 24).padStart(2, "0")}:00`,
+  );
+  const baseHour = laporan.commDisch?.toDate()?.getHours() || 0;
+
+  const estimatedHour = schedule.length
+    ? Math.max(...schedule.map((s) => s.endHour)) - baseHour
+    : 0;
+
+  console.log("selectedHolds", selectedHolds);
+  console.log("holdBL", holdBL);
+  console.log("schedule", schedule);
   return (
     <Wrapper>
       {/* ================= HEADER ================= */}
       <Section>
         <HeaderSection>
-          <MainTitle>HMC WORKING PROGRAMME</MainTitle>
+          <MainTitle>CRANE WORKING PROGRAMME</MainTitle>
 
           <InfoGrid>
             {/* ================= KOLOM 1 ================= */}
@@ -120,18 +195,13 @@ export default function PlannerForm() {
               </InfoRow>
 
               <InfoRow>
-                <label>DISCHARGE STATUS</label>
-                <span>{laporan.dischargeStatus || "-"}</span>
-              </InfoRow>
-
-              <InfoRow>
                 <label>TOTAL B/L</label>
-                <span>{laporan.totalBL || "-"}</span>
+                <span>{laporan.jumlahMuatan || "-"}</span>
               </InfoRow>
 
               <InfoRow>
                 <label>TOTAL DISCHARGE</label>
-                <span>{laporan.totalDischarge || 0}</span>
+                <span>{totalDischarge}</span>
               </InfoRow>
             </InfoColumn>
 
@@ -150,8 +220,8 @@ export default function PlannerForm() {
               </InfoRow>
 
               <InfoRow>
-                <label>VOYAGE NO</label>
-                <span>{laporan.voyage || "-"}</span>
+                <label>PPK</label>
+                <span>{laporan.ppk || "-"}</span>
               </InfoRow>
 
               <InfoRow>
@@ -166,12 +236,12 @@ export default function PlannerForm() {
 
               <InfoRow>
                 <label>Com Disc</label>
-                <span>{formatDateTime(laporan.commenceDischarge)}</span>
+                <span>{formatDateTime(laporan.commDisch)}</span>
               </InfoRow>
 
               <InfoRow>
                 <label>CARGO ROB</label>
-                <span>{laporan.cargoROB || "-"}</span>
+                <span>{cargoROB}</span>
               </InfoRow>
             </InfoColumn>
           </InfoGrid>
@@ -179,8 +249,6 @@ export default function PlannerForm() {
       </Section>
       {/* ================= PARAMETER ================= */}
       <Section>
-        <Title>Parameter Discharging</Title>
-
         <Grid>
           <InfoBox>
             <label>Discharging Rate (MT / Jam)</label>
@@ -196,7 +264,10 @@ export default function PlannerForm() {
             <input
               type="number"
               value={totalGang}
-              onChange={(e) => setTotalGang(Number(e.target.value))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setTotalGang(value === "" ? "" : Number(value));
+              }}
             />
           </InfoBox>
 
@@ -208,8 +279,6 @@ export default function PlannerForm() {
       </Section>
 
       <Section>
-        <Title>HMC WORKING PROGRAMME – HOLD PLAN</Title>
-
         <PlannerRow>
           {/* ================= KIRI ================= */}
           <LeftHeader>
@@ -242,9 +311,22 @@ export default function PlannerForm() {
 
             <HoldRow>
               <HoldLabel>TOTAL B/L</HoldLabel>
+
               {[7, 6, 5, 4, 3, 2, 1].map((h) => (
                 <HoldCell key={h} active={selectedHolds.includes(h)}>
-                  {selectedHolds.includes(h) && <input placeholder="MT" />}
+                  {selectedHolds.includes(h) && (
+                    <input
+                      type="number"
+                      placeholder="MT"
+                      value={holdBL[h] || ""}
+                      onChange={(e) =>
+                        setHoldBL((prev) => ({
+                          ...prev,
+                          [h]: Number(e.target.value),
+                        }))
+                      }
+                    />
+                  )}
                 </HoldCell>
               ))}
             </HoldRow>
@@ -272,7 +354,11 @@ export default function PlannerForm() {
         {hours.map((time, i) => {
           const hour = parseInt(time.split(":")[0]);
 
-          const isNewDay = i === 0;
+          const isNewDay = i % 24 === 0;
+          const dayOffset = Math.floor(i / 24);
+          const currentDate = new Date(comDiscDate);
+          currentDate.setDate(currentDate.getDate() + dayOffset);
+
           const isNewShift = hour === 0 || hour === 8 || hour === 16;
 
           return (
@@ -282,11 +368,22 @@ export default function PlannerForm() {
                 {/* DATE */}
                 <DateBox>
                   {isNewDay
-                    ? comDiscDate.toLocaleDateString("id-ID", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                      })
+                    ? (() => {
+                        const day = currentDate.toLocaleDateString("id-ID", {
+                          weekday: "short",
+                        });
+                        const date = currentDate.toLocaleDateString("id-ID", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                        });
+
+                        return (
+                          <VerticalDate>
+                            {day} {date}
+                          </VerticalDate>
+                        );
+                      })()
                     : ""}
                 </DateBox>
 
@@ -299,13 +396,22 @@ export default function PlannerForm() {
 
               {/* ================= KANAN ================= */}
               <RightTable>
-                <HoldRow>
+                <HoldRowCompact>
                   <HoldLabel />
 
-                  {[7, 6, 5, 4, 3, 2, 1].map((h) => (
-                    <HoldCell key={h} />
-                  ))}
-                </HoldRow>
+                  {[7, 6, 5, 4, 3, 2, 1].map((h) => {
+                    const activeHolds = schedule
+                      .filter((s) => i >= s.startHour && i < s.endHour)
+                      .map((s) => s.hold);
+
+                    return (
+                      <HoldCellCompact
+                        key={h}
+                        active={activeHolds.includes(h)}
+                      />
+                    );
+                  })}
+                </HoldRowCompact>
               </RightTable>
             </PlannerRow>
           );
@@ -316,6 +422,12 @@ export default function PlannerForm() {
 }
 
 /* ===================== STYLES ===================== */
+const HoldRowCompact = styled.div`
+  display: grid;
+  grid-template-columns: 140px repeat(7, 1fr);
+  height: 18px;
+  min-height: 18px;
+`;
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -630,6 +742,11 @@ const HoldCell = styled.div`
   }
 `;
 
+const HoldCellCompact = styled(HoldCell)`
+  height: 8px;
+  padding: 0;
+`;
+
 const SmallBox = styled.div`
   width: 50px;
   font-size: 10px;
@@ -666,4 +783,13 @@ const TimeBox = styled.div`
   align-items: center;
   justify-content: center;
   border-bottom: 1px solid #ccc;
+`;
+const VerticalDate = styled.div`
+  transform: rotate(-90deg);
+  transform-origin: center;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1;
+  text-align: center;
 `;
