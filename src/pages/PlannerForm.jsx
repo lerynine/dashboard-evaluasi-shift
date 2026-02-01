@@ -83,6 +83,8 @@ const shiftRanges = {
   8: 8,
   16: 8,
 };
+const ROW_HEIGHT = 18; // px (harus sama dengan HoldRow)
+const DATE_WIDTH = 36;
 
 export default function PlannerForm() {
   const { id } = useParams();
@@ -111,7 +113,6 @@ export default function PlannerForm() {
 
     fetchData();
   }, [id]);
-  const ROW_HEIGHT = 36; // px (harus sama dengan HoldRow)
 
   const toggleHold = (hold) => {
     setSelectedHolds((prev) => {
@@ -147,14 +148,18 @@ export default function PlannerForm() {
     commDisch: laporan.commDisch?.toDate(),
   });
 
-  const lastHour = schedule.length
+  const lastActiveHour = schedule.length
     ? Math.max(...schedule.map((s) => s.endHour))
     : 24;
 
+  // hitung sampai akhir hari terakhir
+  const totalRenderHour = Math.ceil(lastActiveHour / 24) * 24;
+
   const hours = Array.from(
-    { length: lastHour },
+    { length: totalRenderHour },
     (_, i) => `${String(i % 24).padStart(2, "0")}:00`,
   );
+
   const baseHour = laporan.commDisch?.toDate()?.getHours() || 0;
 
   const estimatedHour = schedule.length
@@ -351,6 +356,7 @@ export default function PlannerForm() {
           </RightTable>
         </PlannerRow>
         {/* ================= TIME TABLE ================= */}
+
         {hours.map((time, i) => {
           const hour = parseInt(time.split(":")[0]);
 
@@ -365,27 +371,22 @@ export default function PlannerForm() {
             <PlannerRow key={i}>
               {/* ================= KIRI ================= */}
               <LeftHeader>
-                {/* DATE */}
-                <DateBox>
-                  {isNewDay
-                    ? (() => {
-                        const day = currentDate.toLocaleDateString("id-ID", {
-                          weekday: "short",
-                        });
-                        const date = currentDate.toLocaleDateString("id-ID", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                        });
+                {/* SLOT DATE (kosong tapi konsisten tinggi) */}
+                <DateBox />
 
-                        return (
-                          <VerticalDate>
-                            {day} {date}
-                          </VerticalDate>
-                        );
-                      })()
-                    : ""}
-                </DateBox>
+                {/* DATE MERGED — hanya di jam pertama */}
+                {isNewDay && (
+                  <DateBoxMerged rows={26.5} rowHeight={ROW_HEIGHT}>
+                    <VerticalDate>
+                      {currentDate.toLocaleDateString("id-ID", {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                      })}
+                    </VerticalDate>
+                  </DateBoxMerged>
+                )}
 
                 {/* SHIFT */}
                 <ShiftBox>{isNewShift ? getShift(hour) : ""}</ShiftBox>
@@ -425,7 +426,7 @@ export default function PlannerForm() {
 const HoldRowCompact = styled.div`
   display: grid;
   grid-template-columns: 140px repeat(7, 1fr);
-  height: 18px;
+  height: ${ROW_HEIGHT}px;
   min-height: 18px;
 `;
 
@@ -653,6 +654,7 @@ const PlannerRow = styled.div`
 
 const LeftHeader = styled.div`
   display: grid;
+  position: relative;
   grid-template-columns: repeat(3, 36px);
   border: 1px solid #999;
   background: #e5e5e5;
@@ -755,17 +757,29 @@ const SmallBox = styled.div`
 `;
 
 const DateBox = styled.div`
-  flex: 1;
-  font-size: 10px;
-  text-align: center;
+  width: 40px;
+  height: ${ROW_HEIGHT}px;
+`;
+
+const DateBoxMerged = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+
+  width: ${DATE_WIDTH}px;
+  height: ${({ rows, rowHeight }) => rows * rowHeight}px;
+
   display: flex;
   align-items: center;
   justify-content: center;
-  border-right: 1px solid #ccc;
+
+  z-index: 2;
+  background: #f7f7f7;
 `;
 
 const ShiftBox = styled.div`
   flex: 1;
+  height: ${ROW_HEIGHT}px;
   font-size: 10px;
   text-align: center;
   display: flex;
@@ -776,6 +790,7 @@ const ShiftBox = styled.div`
 
 const TimeBox = styled.div`
   flex: 1;
+  height: ${ROW_HEIGHT}px;
   font-size: 11px;
   font-weight: 500;
   text-align: center;
