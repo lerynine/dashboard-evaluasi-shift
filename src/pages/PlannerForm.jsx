@@ -1,9 +1,9 @@
-// src/pages/PlannerForm.jsx
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import styled from "styled-components";
+import { serverTimestamp } from "firebase/firestore";
 
 function generateSchedule({
   selectedHolds,
@@ -83,6 +83,7 @@ const shiftRanges = {
   8: 8,
   16: 8,
 };
+
 const ROW_HEIGHT = 18; // px (harus sama dengan HoldRow)
 const DATE_WIDTH = 36;
 
@@ -91,11 +92,12 @@ export default function PlannerForm() {
 
   const [loading, setLoading] = useState(true);
   const [laporan, setLaporan] = useState(null);
-
+  const [saving, setSaving] = useState(false);
   // planner input
   const [selectedHolds, setSelectedHolds] = useState([]);
   const [totalGang, setTotalGang] = useState("");
   const [dischRate, setDischRate] = useState("");
+  const [schedule, setSchedule] = useState([]);
 
   const [holdBL, setHoldBL] = useState({});
 
@@ -105,7 +107,16 @@ export default function PlannerForm() {
       const snap = await getDoc(ref);
 
       if (snap.exists()) {
-        setLaporan({ id: snap.id, ...snap.data() });
+        const data = snap.data();
+        setLaporan({ id: snap.id, ...data });
+
+        // 🔥 HYDRATE PLANNING STATE
+        if (data.planning) {
+          setSelectedHolds(data.planning.selectedHolds || []);
+          setTotalGang(data.planning.totalGang ?? "");
+          setDischRate(data.planning.dischRate ?? "");
+          setHoldBL(data.planning.holdBL || {});
+        }
       }
 
       setLoading(false);
@@ -113,6 +124,23 @@ export default function PlannerForm() {
 
     fetchData();
   }, [id]);
+
+  useEffect(() => {
+    if (!laporan) return;
+
+    if (laporan.planning?.schedule) {
+      setSchedule(laporan.planning.schedule);
+    } else {
+      const auto = generateSchedule({
+        selectedHolds,
+        holdBL,
+        dischRate,
+        totalGang,
+        commDisch: laporan.commDisch?.toDate(),
+      });
+      setSchedule(auto);
+    }
+  }, [laporan]);
 
   const toggleHold = (hold) => {
     setSelectedHolds((prev) => {
@@ -140,14 +168,6 @@ export default function PlannerForm() {
 
   const cargoROB = Math.max(totalMuatan - totalDischarge, 0);
 
-  const schedule = generateSchedule({
-    selectedHolds,
-    holdBL,
-    dischRate,
-    totalGang,
-    commDisch: laporan.commDisch?.toDate(),
-  });
-
   const lastActiveHour = schedule.length
     ? Math.max(...schedule.map((s) => s.endHour))
     : 24;
@@ -159,6 +179,33 @@ export default function PlannerForm() {
     { length: totalRenderHour },
     (_, i) => `${String(i % 24).padStart(2, "0")}:00`,
   );
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+
+      const ref = doc(db, "laporan", id);
+
+      await updateDoc(ref, {
+        planning: {
+          selectedHolds,
+          totalGang: Number(totalGang),
+          dischRate: Number(dischRate),
+          holdBL,
+          schedule,
+          estimatedHour,
+        },
+        planningUpdatedAt: serverTimestamp(),
+      });
+
+      alert("Planning berhasil disimpan ✅");
+    } catch (err) {
+      console.error(err);
+      alert("Gagal menyimpan planning ❌");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const baseHour = laporan.commDisch?.toDate()?.getHours() || 0;
 
@@ -281,6 +328,11 @@ export default function PlannerForm() {
             <span>{estimatedHour} Jam</span>
           </InfoBox>
         </Grid>
+        <SaveBar>
+          <SaveButton onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "💾 Simpan"}
+          </SaveButton>
+        </SaveBar>
       </Section>
 
       <Section>
@@ -799,6 +851,7 @@ const TimeBox = styled.div`
   justify-content: center;
   border-bottom: 1px solid #ccc;
 `;
+
 const VerticalDate = styled.div`
   transform: rotate(-90deg);
   transform-origin: center;
@@ -807,4 +860,28 @@ const VerticalDate = styled.div`
   white-space: nowrap;
   line-height: 1;
   text-align: center;
+`;
+
+const SaveBar = styled.div`
+  position: sticky;
+  top: 8px;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  z-index: 10;
+`;
+
+const SaveButton = styled.button`
+  background: #003fc7;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 `;

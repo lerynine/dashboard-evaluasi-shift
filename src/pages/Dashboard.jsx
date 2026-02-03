@@ -16,7 +16,6 @@ import { FaBars, FaTimes } from "react-icons/fa";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
-
 const toNumber = (val) => {
   if (val === undefined || val === null || val === "") return 0;
 
@@ -2985,3 +2984,13 @@ const MenuButton = styled.button`
   font-size: 22px;
   cursor: pointer;
 `;
+
+const IblLuarLayout = ({ children }) => <>{children}</>;
+const IblDalamLayout = ({ children }) => <>{children}</>;
+const Dermaga265Layout = ({ children }) => <>{children}</>;
+const Dermaga70Layout = ({ children }) => <>{children}</>;
+const TaludTegakKonvensionalLayout = ({ children }) => <>{children}</>;
+const TaludTegakFixCraneLayout = ({ children }) => <>{children}</>;
+const TaludTegakSisiDalamLayout = ({ children }) => <>{children}</>;
+const Dermaga78Layout = ({ children }) => <>{children}</>;
+const GresikJasaTamaLayout = ({ children }) => <>{children}</>;
