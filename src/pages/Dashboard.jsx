@@ -162,8 +162,10 @@ const BRANCH_TERMINALS = {
     "Jamrud Utara",
     "Jamrud Selatan",
     "Jamrud Barat",
-    "Nilam",
-    "Mirah",
+    "Nilam Utara",
+    "Nilam Selatan",
+    "Mirah Selatan",
+    "Mirah Timur",
     "Surabaya Veem",
   ],
   KALIMAS: [],
@@ -474,7 +476,7 @@ export default function Dashboard() {
           maximumFractionDigits: 2,
         });
   };
-  
+
   useEffect(() => {
     const fetchData = async () => {
       console.log("📡 Mulai ambil data dari Firestore dan Google Sheet...");
@@ -781,14 +783,45 @@ export default function Dashboard() {
   }, [rawData, startDate, endDate, selectedShift]);
 
   const branchOverview = useMemo(() => {
-    if (!overviewBaseData || overviewBaseData.length === 0) return {};
+    console.group("📊 branchOverview recalculated");
+
+    if (!overviewBaseData || overviewBaseData.length === 0) {
+      console.warn(
+        "❌ overviewBaseData kosong atau undefined",
+        overviewBaseData,
+      );
+      console.groupEnd();
+      return {};
+    }
+
+    console.log("✅ overviewBaseData length:", overviewBaseData.length);
+    console.table(overviewBaseData);
 
     const result = {};
 
     Object.entries(BRANCH_TERMINALS).forEach(([branchKey, terminals]) => {
-      const data = overviewBaseData.filter((d) =>
-        terminals.includes(d.terminal),
-      );
+      console.group(`🏷️ Branch: ${branchKey}`);
+
+      console.log("📍 terminals expected:", terminals);
+
+      const data = overviewBaseData.filter((d) => {
+        const match = terminals.includes(d.terminal);
+
+        if (!match) {
+          console.log(
+            "❌ TERMINAL TIDAK MATCH",
+            "| data.terminal:",
+            `"${d.terminal}"`,
+            "| expected:",
+            terminals,
+          );
+        }
+
+        return match;
+      });
+
+      console.log("📦 data lolos filter:", data.length);
+      console.table(data);
 
       const kapalUnik = new Set(data.map((d) => d.namaKapal)).size;
       const delay = data.filter((d) => d.status === "DELAY").length;
@@ -800,7 +833,13 @@ export default function Dashboard() {
         delay,
         delayPct: kapalUnik ? (delay / kapalUnik) * 100 : 0,
       };
+
+      console.log("📊 result branch:", result[branchKey]);
+      console.groupEnd();
     });
+
+    console.log("✅ FINAL RESULT:", result);
+    console.groupEnd();
 
     return result;
   }, [overviewBaseData]);
@@ -1284,116 +1323,73 @@ export default function Dashboard() {
         {/* 🔹 LAYOUT GRESIK */}
         {isGresik && (
           <div className="pdf-page no-break">
-            {/* DERMAGA IBL SISI LUAR */}
             {(selectedTerminals.length === 0 ||
-              selectedTerminals.some((t) =>
-                t.startsWith("DERMAGA IBL SISI DALAM"),
+              selectedTerminals.some((t) => t.includes("DERMAGA IBL"))) && (
+              <div className="section no-break">
+                <IblLayout
+                  data={filteredData.filter((d) =>
+                    d.terminal.includes("DERMAGA"),
+                  )}
+                />
+              </div>
+            )}
+
+            {/* DERMAGA 265 & 70 (Gabungan) */}
+            {(selectedTerminals.length === 0 ||
+              selectedTerminals.some(
+                (t) =>
+                  t.startsWith("DERMAGA 265") || t.startsWith("DERMAGA 70"),
               )) && (
               <div className="section no-break">
-                <IblLuarLayout
-                  data={filteredData.filter((d) =>
-                    d.terminal.startsWith("DERMAGA IBL SISI DALAM"),
+                <Dermaga70265Layout
+                  data={filteredData.filter(
+                    (d) =>
+                      d.terminal.startsWith("DERMAGA 265") ||
+                      d.terminal.startsWith("DERMAGA 70"),
                   )}
                   selectedTerminals={selectedTerminals}
                 />
               </div>
             )}
 
-            {/* DERMAGA IBL SISI DALAM */}
+            {/* TALUD TEGAK (Gabungan) */}
             {(selectedTerminals.length === 0 ||
-              selectedTerminals.some((t) =>
-                t.startsWith("DERMAGA UMUM IBL SISI LUAR"),
+              selectedTerminals.some(
+                (t) =>
+                  t.startsWith("DERMAGA UMUM TALUD TEGAK KONVENSIONAL") ||
+                  t.startsWith("DERMAGA UMUM TALUD TEGAK FIX CRANE") ||
+                  t.startsWith("DERMAGA TALUD TEGAK SISI DALAM") ||
+                  t.startsWith("DERMAGA 78"),
               )) && (
               <div className="section no-break">
-                <IblDalamLayout
-                  data={filteredData.filter((d) =>
-                    d.terminal.startsWith("DERMAGA UMUM IBL SISI LUAR"),
+                <TaludTegakLayout
+                  data={filteredData.filter(
+                    (d) =>
+                      d.terminal.startsWith(
+                        "DERMAGA UMUM TALUD TEGAK KONVENSIONAL",
+                      ) ||
+                      d.terminal.startsWith(
+                        "DERMAGA UMUM TALUD TEGAK FIX CRANE",
+                      ) ||
+                      d.terminal.startsWith("DERMAGA TALUD TEGAK SISI DALAM") ||
+                      d.terminal.startsWith("DERMAGA 78"),
                   )}
                   selectedTerminals={selectedTerminals}
                 />
               </div>
             )}
 
-            {/* DERMAGA 265 */}
+            {/* DERMAGA 180 */}
             {(selectedTerminals.length === 0 ||
-              selectedTerminals.some((t) => t.startsWith("DERMAGA 265"))) && (
-              <div className="section no-break">
-                <Dermaga265Layout
-                  data={filteredData.filter((d) =>
-                    d.terminal.startsWith("DERMAGA 265"),
-                  )}
-                  selectedTerminals={selectedTerminals}
-                />
-              </div>
-            )}
-
-            {/* DERMAGA 70 */}
-            {(selectedTerminals.length === 0 ||
-              selectedTerminals.some((t) => t.startsWith("DERMAGA 70"))) && (
-              <div className="section no-break">
-                <Dermaga70Layout
-                  data={filteredData.filter((d) =>
-                    d.terminal.startsWith("DERMAGA 70"),
-                  )}
-                  selectedTerminals={selectedTerminals}
-                />
-              </div>
-            )}
-
-            {/* DERMAGA UMUM TALUD TEGAK KONVENSIONAL */}
-            {(selectedTerminals.length === 0 ||
-              selectedTerminals.some((t) =>
-                t.startsWith("DERMAGA UMUM TALUD TEGAK KONVENSIONAL"),
+              selectedTerminals.some(
+                (t) =>
+                  t.startsWith("DERMAGA 180") ,
               )) && (
               <div className="section no-break">
-                <TaludTegakKonvensionalLayout
-                  data={filteredData.filter((d) =>
-                    d.terminal.startsWith(
-                      "DERMAGA UMUM TALUD TEGAK KONVENSIONAL",
-                    ),
-                  )}
-                  selectedTerminals={selectedTerminals}
-                />
-              </div>
-            )}
-
-            {/* DERMAGA UMUM TALUD TEGAK FIX CRANE */}
-            {(selectedTerminals.length === 0 ||
-              selectedTerminals.some((t) =>
-                t.startsWith("DERMAGA UMUM TALUD TEGAK FIX CRANE"),
-              )) && (
-              <div className="section no-break">
-                <TaludTegakFixCraneLayout
-                  data={filteredData.filter((d) =>
-                    d.terminal.startsWith("DERMAGA UMUM TALUD TEGAK FIX CRANE"),
-                  )}
-                  selectedTerminals={selectedTerminals}
-                />
-              </div>
-            )}
-
-            {/* DERMAGA TALUD TEGAK SISI DALAM */}
-            {(selectedTerminals.length === 0 ||
-              selectedTerminals.some((t) =>
-                t.startsWith("DERMAGA TALUD TEGAK SISI DALAM"),
-              )) && (
-              <div className="section no-break">
-                <TaludTegakSisiDalamLayout
-                  data={filteredData.filter((d) =>
-                    d.terminal.startsWith("DERMAGA TALUD TEGAK SISI DALAM"),
-                  )}
-                  selectedTerminals={selectedTerminals}
-                />
-              </div>
-            )}
-
-            {/* DERMAGA 78 */}
-            {(selectedTerminals.length === 0 ||
-              selectedTerminals.some((t) => t.startsWith("DERMAGA 78"))) && (
-              <div className="section no-break">
-                <Dermaga78Layout
-                  data={filteredData.filter((d) =>
-                    d.terminal.startsWith("DERMAGA 78"),
+                <Dermaga180Layout
+                  data={filteredData.filter(
+                    (d) =>
+                      d.terminal.startsWith("DERMAGA 180"),
                   )}
                   selectedTerminals={selectedTerminals}
                 />
@@ -1402,7 +1398,9 @@ export default function Dashboard() {
 
             {/* DERMAGA UMUM PT. GRESIK JASA TAMA */}
             {(selectedTerminals.length === 0 ||
-              selectedTerminals.some((t) => t.startsWith("DERMAGA UMUM PT. GRESIK JASA TAMA"))) && (
+              selectedTerminals.some((t) =>
+                t.startsWith("DERMAGA UMUM PT. GRESIK JASA TAMA"),
+              )) && (
               <div className="section no-break">
                 <GresikJasaTamaLayout
                   data={filteredData.filter((d) =>
@@ -2229,6 +2227,322 @@ const MirahLayout = ({ data = [], selectedTerminals = [] }) => {
   );
 };
 
+const IblLayout = ({ data = [] }) => {
+  // 🔹 2 tambatan: 1 Dalam (bawah), 2 Luar (atas)
+  const tambatan = [
+    { id: 1, posisi: "bottom", nama: "N/A" }, // DALAM
+    { id: 2, posisi: "top", nama: "N/A" }, // LUAR
+  ];
+
+  const updatedTambatan = useMemo(() => {
+    return tambatan.map((t) => {
+      const match = data.find((d) => {
+        const terminal = (d.terminal || "").toLowerCase();
+
+        if (t.id === 1 && terminal.includes("dalam")) return true;
+        if (t.id === 2 && terminal.includes("luar")) return true;
+
+        return false;
+      });
+
+      return {
+        ...t,
+        nama: match ? match.namaKapal : "N/A",
+        jumlahMuatan: match ? match.jumlahMuatan : null,
+        etbetd: match ? match.etbetd : null,
+        status: match ? match.status : null,
+      };
+    });
+  }, [data]);
+
+  return (
+    <div style={{ textAlign: "center", marginTop: "50px" }}>
+      <Title>Dermaga IBL</Title>
+
+      <IblContainer>
+        <DockWrapperIbl>
+          {/* 🔹 Kapal ATAS (Berth 2 - LUAR) */}
+          {updatedTambatan
+            .filter((t) => t.posisi === "top")
+            .map((t) => (
+              <ShipTopWrapper key={t.id}>
+                <BerthLabelIblTop>Berth {t.id}</BerthLabelIblTop>
+                <ShipIbl>
+                  <ShipInfoOverlayIbl status={t.status}>
+                    <strong>{t.nama}</strong>
+                    {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
+                  </ShipInfoOverlayIbl>
+                </ShipIbl>
+              </ShipTopWrapper>
+            ))}
+
+          {/* 🔹 Kapal BAWAH (Berth 1 - DALAM) */}
+          {updatedTambatan
+            .filter((t) => t.posisi === "bottom")
+            .map((t) => (
+              <ShipBottomWrapper key={t.id}>
+                <BerthLabelIblBottom>Berth {t.id}</BerthLabelIblBottom>
+                <ShipIbl>
+                  <ShipInfoOverlayIbl status={t.status}>
+                    <strong>{t.nama}</strong>
+                    {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
+                  </ShipInfoOverlayIbl>
+                </ShipIbl>
+              </ShipBottomWrapper>
+            ))}
+
+          {/* 🔹 Dock */}
+          <DockIbl />
+        </DockWrapperIbl>
+      </IblContainer>
+    </div>
+  );
+};
+
+const Dermaga70265Layout = ({ data = [] }) => {
+  // 🔹 4 berth (1 = 70, 2-4 = 265)
+  const tambatan = [
+    { id: 1, terminal: "DERMAGA 70" },
+    { id: 2, terminal: "DERMAGA 265" },
+    { id: 3, terminal: "DERMAGA 265" },
+    { id: 4, terminal: "DERMAGA 265" },
+  ];
+
+  const updatedTambatan = useMemo(() => {
+    return tambatan.map((t) => {
+      const match = data.find(
+        (d) =>
+          d.terminal?.startsWith(t.terminal) && parseInt(d.tambatan) === t.id,
+      );
+
+      return {
+        ...t,
+        nama: match?.namaKapal || "N/A",
+        etbetd: match?.etbetd || null,
+        status: match?.status || null,
+      };
+    });
+  }, [data]);
+
+  return (
+    <div style={{ textAlign: "center", marginTop: "50px" }}>
+      <Title>Dermaga 70 & 265</Title>
+
+      <DermagaContainer>
+        <DockWrapper70265>
+          {/* 🔹 GROUP DERMAGA 70 (Berth 1) */}
+          <ShipGroupLeft>
+            {updatedTambatan
+              .filter((t) => t.id === 1)
+              .map((t) => (
+                <ShipWrapper70265 key={t.id}>
+                  <BerthLabel70265>Berth {t.id}</BerthLabel70265>
+                  <Ship70265>
+                    <ShipInfoOverlay70265 status={t.status}>
+                      <strong>{t.nama}</strong>
+                      {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
+                    </ShipInfoOverlay70265>
+                  </Ship70265>
+                </ShipWrapper70265>
+              ))}
+          </ShipGroupLeft>
+
+          {/* 🔹 GROUP DERMAGA 265 (Berth 2-4) */}
+          <ShipGroupRight>
+            {updatedTambatan
+              .filter((t) => t.id !== 1)
+              .map((t) => (
+                <ShipWrapper70265 key={t.id}>
+                  <BerthLabel70265>Berth {t.id}</BerthLabel70265>
+                  <Ship70265>
+                    <ShipInfoOverlay70265 status={t.status}>
+                      <strong>{t.nama}</strong>
+                      {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
+                    </ShipInfoOverlay70265>
+                  </Ship70265>
+                </ShipWrapper70265>
+              ))}
+          </ShipGroupRight>
+
+          {/* 🔹 Dock Background */}
+          <Dock70265 />
+        </DockWrapper70265>
+      </DermagaContainer>
+    </div>
+  );
+};
+
+const TaludTegakLayout = ({ data = [] }) => {
+  const tambatan = [
+    { id: 1, namaTerminal: "DERMAGA UMUM TALUD TEGAK KONVENSIONAL", posisi: "top" },
+    { id: 2, namaTerminal: "DERMAGA UMUM TALUD TEGAK FIX CRANE", posisi: "top" },
+    { id: 3, namaTerminal: "DERMAGA TALUD TEGAK SISI DALAM", posisi: "bottom" },
+    { id: 4, namaTerminal: "DERMAGA 78", posisi: "top" },
+  ];
+
+  const updatedTambatan = useMemo(() => {
+    return tambatan.map((t) => {
+      const match = data.find((d) =>
+        d.terminal?.startsWith(t.namaTerminal)
+      );
+
+      return {
+        ...t,
+        nama: match?.namaKapal || "N/A",
+        etbetd: match?.etbetd || null,
+        status: match?.status || null,
+      };
+    });
+  }, [data]);
+
+  return (
+    <div style={{ textAlign: "center", marginTop: "50px" }}>
+      <Title>Talud Tegak</Title>
+
+      <TaludContainer>
+        <DockWrapperTalud>
+
+          {/* 🔹 TOP ROW */}
+          <ShipRowTopTalud>
+            {updatedTambatan
+              .filter((t) => t.posisi === "top")
+              .map((t) => (
+                <ShipWrapperTalud key={t.id}>
+                  <BerthLabelTaludTop>Berth {t.id}</BerthLabelTaludTop>
+                  <ShipTalud>
+                    <ShipInfoOverlayTalud status={t.status}>
+                      <strong>{t.nama}</strong>
+                      {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
+                    </ShipInfoOverlayTalud>
+                  </ShipTalud>
+                </ShipWrapperTalud>
+              ))}
+          </ShipRowTopTalud>
+
+          {/* 🔹 BOTTOM ROW */}
+          <ShipRowBottomTalud>
+            {updatedTambatan
+              .filter((t) => t.posisi === "bottom")
+              .map((t) => (
+                <ShipWrapperTalud key={t.id}>
+                  <BerthLabelTaludBottom>Berth {t.id}</BerthLabelTaludBottom>
+                  <ShipTalud>
+                    <ShipInfoOverlayTalud status={t.status}>
+                      <strong>{t.nama}</strong>
+                      {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
+                    </ShipInfoOverlayTalud>
+                  </ShipTalud>
+                </ShipWrapperTalud>
+              ))}
+          </ShipRowBottomTalud>
+
+          {/* 🔹 DOCK BACKGROUND */}
+          <DockTalud />
+        </DockWrapperTalud>
+      </TaludContainer>
+    </div>
+  );
+};
+
+const Dermaga180Layout = ({ data = [] }) => {
+  const tambatan = [
+    { id: 1 },
+    { id: 2 },
+  ];
+
+  const updatedTambatan = useMemo(() => {
+    return tambatan.map((t) => {
+      const match = data.find(
+        (d) => parseInt(d.tambatan) === t.id
+      );
+
+      return {
+        ...t,
+        nama: match?.namaKapal || "N/A",
+        etbetd: match?.etbetd || null,
+        status: match?.status || null,
+      };
+    });
+  }, [data]);
+
+  return (
+    <div style={{ textAlign: "center", marginTop: "50px" }}>
+      <Title>Dermaga 180</Title>
+
+      <Dermaga180Container>
+        <DockWrapper180>
+
+          {/* 🔹 TOP ROW (2 kapal) */}
+          <ShipRowTop180>
+            {updatedTambatan.map((t) => (
+              <ShipWrapper180 key={t.id}>
+                <BerthLabel180>Berth {t.id}</BerthLabel180>
+                <Ship180>
+                  <ShipInfoOverlay180 status={t.status}>
+                    <strong>{t.nama}</strong>
+                    {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
+                  </ShipInfoOverlay180>
+                </Ship180>
+              </ShipWrapper180>
+            ))}
+          </ShipRowTop180>
+
+          {/* 🔹 DOCK BACKGROUND */}
+          <Dock180 />
+        </DockWrapper180>
+      </Dermaga180Container>
+    </div>
+  );
+};
+
+const GresikJasaTamaLayout = ({ data = [] }) => {
+  const tambatan = [1, 2, 3, 4, 5, 6];
+
+  const updatedTambatan = useMemo(() => {
+    return tambatan.map((id) => {
+      const match = data.find(
+        (d) => parseInt(d.tambatan) === id
+      );
+
+      return {
+        id,
+        nama: match?.namaKapal || "N/A",
+        etbetd: match?.etbetd || null,
+        status: match?.status || null,
+      };
+    });
+  }, [data]);
+
+  return (
+    <div style={{ textAlign: "center", marginTop: "50px" }}>
+      <Title>Layout Dermaga Gresik Jasa Tama</Title>
+
+      <GresikContainer>
+        <DockWrapperGresik>
+
+          {/* 🔹 TOP ROW - 6 Kapal */}
+          <ShipRowTopGresik>
+            {updatedTambatan.map((t) => (
+              <ShipWrapperGresik key={t.id}>
+                <BerthLabelGresik>Berth {t.id}</BerthLabelGresik>
+                <ShipGresik>
+                  <ShipInfoOverlayGresik status={t.status}>
+                    <strong>{t.nama}</strong>
+                    {t.etbetd && <div>ETB/ETD: {t.etbetd}</div>}
+                  </ShipInfoOverlayGresik>
+                </ShipGresik>
+              </ShipWrapperGresik>
+            ))}
+          </ShipRowTopGresik>
+
+          {/* 🔹 DOCK BACKGROUND */}
+          <DockGresik />
+        </DockWrapperGresik>
+      </GresikContainer>
+    </div>
+  );
+};
+
 /* Styled Components */
 const Container = styled.div`
   background-color: #f5f7fa;
@@ -2956,6 +3270,131 @@ const ShipWrapperLeftMirah = styled.div`
   margin-left: -40px; /* ⬅️ geser sedikit ke kiri agar kapal vertikal lebih menempel ke dock */
 `;
 
+/* ==========================================================
+   🔹 Layout Dermaga IBL 
+   ========================================================== */
+
+const IblContainer = styled.div`
+  margin-top: 40px;
+  padding: 30px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 43, 91, 0.15);
+  display: flex;
+  justify-content: center;
+`;
+
+const DockWrapperIbl = styled.div`
+  position: relative;
+  width: 900px;
+  height: 420px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+`;
+
+const DockIbl = styled.div`
+  width: 1100px;
+  height: 480px;
+  background-image: url("/images/dermaga-ibl.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  position: relative;
+  border-radius: 10px;
+  z-index: 0;
+`;
+
+/* 🔹 Kapal bawah (1 kapal) */
+const ShipRowIbl = styled.div`
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+`;
+
+const BerthLabelIblTop = styled.div`
+  position: absolute;
+  top: 85px; /* atur di sini */
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 600;
+  color: #002b5b;
+  z-index: 999;
+`;
+
+const BerthLabelIblBottom = styled.div`
+  position: absolute;
+  bottom: 120px; /* atur di sini */
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 600;
+  color: #002b5b;
+  z-index: 999;
+`;
+
+const ShipIbl = styled.div`
+  width: 250px;
+  height: 90px;
+  background-image: url("/images/kapal-side.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+`;
+
+const ShipInfoOverlayIbl = styled.div`
+  position: absolute;
+  top: -22px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 600;
+  color: #ffffff;
+  background: ${({ status }) =>
+    status === "ON SCHEDULE"
+      ? "rgba(34, 195, 88, 0.65)"
+      : status === "DELAY"
+        ? "rgba(212, 23, 23, 0.55)"
+        : "rgba(0, 43, 91, 0.3)"};
+  border-radius: 6px 6px 0 0;
+  padding: 4px 0;
+
+  strong {
+    display: block;
+    font-size: 9px;
+    font-weight: 800;
+    text-shadow:
+      -1px -1px 0 #001f3f,
+      1px -1px 0 #001f3f,
+      -1px 1px 0 #001f3f,
+      1px 1px 0 #001f3f;
+  }
+`;
+
+const BerthLabelIbl = styled.div`
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #002b5b;
+  text-align: center;
+`;
+
+const ShipWrapperIbl = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`;
+
 const TopBar = styled.div`
   position: fixed;
   top: 0;
@@ -2985,12 +3424,419 @@ const MenuButton = styled.button`
   cursor: pointer;
 `;
 
-const IblLuarLayout = ({ children }) => <>{children}</>;
-const IblDalamLayout = ({ children }) => <>{children}</>;
-const Dermaga265Layout = ({ children }) => <>{children}</>;
-const Dermaga70Layout = ({ children }) => <>{children}</>;
-const TaludTegakKonvensionalLayout = ({ children }) => <>{children}</>;
-const TaludTegakFixCraneLayout = ({ children }) => <>{children}</>;
-const TaludTegakSisiDalamLayout = ({ children }) => <>{children}</>;
-const Dermaga78Layout = ({ children }) => <>{children}</>;
-const GresikJasaTamaLayout = ({ children }) => <>{children}</>;
+/* 🔹 Kapal ATAS (lebih presisi) */
+const ShipTopWrapper = styled.div`
+  position: absolute;
+  top: 5%; /* ⬅️ UBAH ANGKA INI kalau mau naik/turun */
+  left: 40%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 5;
+`;
+
+/* 🔹 Kapal BAWAH */
+const ShipBottomWrapper = styled.div`
+  position: absolute;
+  bottom: 20%; /* ⬅️ UBAH ANGKA INI kalau mau naik/turun */
+  left: 40%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 5;
+`;
+
+const DermagaContainer = styled.div`
+  margin-top: 40px;
+  padding: 30px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 43, 91, 0.15);
+  display: flex;
+  justify-content: center;
+`;
+
+const DockWrapper70265 = styled.div`
+  position: relative;
+  width: 1100px;
+  height: 420px;
+`;
+
+const Dock70265 = styled.div`
+  width: 1100px;
+  height: 420px;
+  background-image: url("/images/dermaga_70_265.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  position: absolute;
+  top: 40px;
+  left: 0;
+  z-index: 0;
+`;
+
+const ShipGroupLeft = styled.div`
+  position: absolute;
+  top: 200px;
+  left: 30px;
+  display: flex;
+`;
+
+const ShipGroupRight = styled.div`
+  position: absolute;
+  top: 30px;
+  right: 200px;
+  display: flex;
+  gap: 20px;
+`;
+
+const ShipWrapper70265 = styled.div`
+  position: relative;
+  width: 200px;
+`;
+
+const BerthLabel70265 = styled.div`
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 600;
+  color: #002b5b;
+  z-index: 10;
+`;
+
+const Ship70265 = styled.div`
+  width: 200px;
+  height: 90px;
+  background-image: url("/images/kapal-side.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  position: relative;
+  z-index: 5;
+`;
+
+const ShipInfoOverlay70265 = styled.div`
+  position: absolute;
+  top: -22px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 600;
+  color: #ffffff;
+  background: ${({ status }) =>
+    status === "ON SCHEDULE"
+      ? "rgba(34,195,88,0.65)"
+      : status === "DELAY"
+        ? "rgba(212,23,23,0.55)"
+        : "rgba(0,43,91,0.3)"};
+  border-radius: 6px 6px 0 0;
+  padding: 4px 0;
+
+  strong {
+    display: block;
+    font-size: 9px;
+    font-weight: 800;
+  }
+`;
+
+const TaludContainer = styled.div`
+  margin-top: 40px;
+  padding: 30px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 43, 91, 0.15);
+  display: flex;
+  justify-content: center;
+`;
+
+const DockWrapperTalud = styled.div`
+  position: relative;
+  width: 1100px;
+  height: 450px;
+`;
+
+const DockTalud = styled.div`
+  width: 1100px;
+  height: 450px;
+  background-image: url("/images/talud-tegak.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  position: absolute;
+  top: 40px;
+  left: 0;
+  z-index: 0;
+`;
+
+const ShipRowTopTalud = styled.div`
+  position: absolute;
+  top: 100px;
+  left: 140px;
+  display: flex;
+  gap: 80px;
+`;
+
+const ShipRowBottomTalud = styled.div`
+  position: absolute;
+  bottom: 55px;
+  left: 37%;
+  transform: translateX(-50%);
+`;
+
+const ShipWrapperTalud = styled.div`
+  position: relative;
+  width: 250px;
+`;
+
+const BerthLabelTaludTop = styled.div`
+  position: absolute;
+  top: 85px;   /* atur di sini kalau mau naik/turun */
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 600;
+  color: #002b5b;
+  z-index: 10;
+`;
+
+const BerthLabelTaludBottom = styled.div`
+  position: absolute;
+  bottom: 110px;  /* atur di sini */
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 600;
+  color: #002b5b;
+  z-index: 100;
+`;
+
+const ShipTalud = styled.div`
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  background-image: url("/images/kapal-side.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  position: relative;
+  z-index: 5;
+`;
+
+const ShipInfoOverlayTalud = styled.div`
+  position: absolute;
+  top: -22px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 600;
+  color: #ffffff;
+  background: ${({ status }) =>
+    status === "ON SCHEDULE"
+      ? "rgba(34,195,88,0.65)"
+      : status === "DELAY"
+      ? "rgba(212,23,23,0.55)"
+      : "rgba(0,43,91,0.3)"};
+  border-radius: 6px 6px 0 0;
+  padding: 4px 0;
+
+  strong {
+    display: block;
+    font-size: 9px;
+    font-weight: 800;
+  }
+`;
+
+const Dermaga180Container = styled.div`
+  margin-top: 40px;
+  padding: 30px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 43, 91, 0.15);
+  display: flex;
+  justify-content: center;
+`;
+
+const DockWrapper180 = styled.div`
+  position: relative;
+  width: 1000px;
+  height: 320px;
+`;
+
+const Dock180 = styled.div`
+  width: 1000px;
+  height: 420px;
+  background-image: url("/images/dermaga-180.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  position: absolute;
+  top: 50px;
+  left: 0;
+  z-index: 0;
+`;
+
+const ShipRowTop180 = styled.div`
+  position: absolute;
+  top: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 120px;   /* jarak antar kapal */
+`;
+
+const ShipWrapper180 = styled.div`
+  position: relative;
+  width: 300px;
+`;
+
+const BerthLabel180 = styled.div`
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 600;
+  color: #002b5b;
+  z-index: 100;
+`;
+
+const Ship180 = styled.div`
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  background-image: url("/images/kapal-side.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  position: relative;
+  z-index: 5;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+`;
+
+const ShipInfoOverlay180 = styled.div`
+  position: absolute;
+  top: -22px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 600;
+  color: #ffffff;
+  background: ${({ status }) =>
+    status === "ON SCHEDULE"
+      ? "rgba(34,195,88,0.65)"
+      : status === "DELAY"
+      ? "rgba(212,23,23,0.55)"
+      : "rgba(0,43,91,0.3)"};
+  border-radius: 6px 6px 0 0;
+  padding: 4px 0;
+
+  strong {
+    display: block;
+    font-size: 9px;
+    font-weight: 800;
+  }
+`;
+
+const GresikContainer = styled.div`
+  margin-top: 40px;
+  padding: 30px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 43, 91, 0.15);
+  display: flex;
+  justify-content: center;
+`;
+
+const DockWrapperGresik = styled.div`
+  position: relative;
+  width: 1300px;
+  height: 400px;
+`;
+
+const DockGresik = styled.div`
+  width: 1100px;
+  height: 450px;
+  background-image: url("/images/gresik-jasa-tama.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  position: absolute;
+  top: 30px;
+  left: 0;
+  z-index: 0;
+`;
+
+const ShipRowTopGresik = styled.div`
+  position: absolute;
+  top: 140px;
+  left: 46.5%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 28px;   /* jarak antar kapal */
+`;
+
+const ShipWrapperGresik = styled.div`
+  position: relative;
+  width: 140px;   /* diperkecil agar muat 6 kapal */
+`;
+
+const BerthLabelGresik = styled.div`
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 600;
+  color: #002b5b;
+  z-index: 100;
+`;
+
+const ShipGresik = styled.div`
+  width: 140px;
+  aspect-ratio: 3 / 1;
+  background-image: url("/images/kapal-side.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  position: relative;
+  z-index: 5;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+`;
+
+const ShipInfoOverlayGresik = styled.div`
+  position: absolute;
+  top: -20px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 600;
+  color: #ffffff;
+  background: ${({ status }) =>
+    status === "ON SCHEDULE"
+      ? "rgba(34,195,88,0.65)"
+      : status === "DELAY"
+      ? "rgba(212,23,23,0.55)"
+      : "rgba(0,43,91,0.3)"};
+  border-radius: 6px 6px 0 0;
+  padding: 4px 0;
+
+  strong {
+    display: block;
+    font-size: 8px;
+    font-weight: 800;
+  }
+`;

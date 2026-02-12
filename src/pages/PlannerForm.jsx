@@ -84,11 +84,41 @@ const shiftRanges = {
   16: 8,
 };
 
+const getCellCenter = ({ hold, hour }) => {
+  // cari cell berdasarkan data attribute
+  const cell = document.querySelector(
+    `[data-hold="${hold}"][data-hour="${hour}"]`,
+  );
+
+  if (!cell) return { x: 0, y: 0 };
+
+  const rect = cell.getBoundingClientRect();
+
+  return {
+    x: rect.left + rect.width / 2 + window.scrollX,
+    y: rect.top + rect.height / 2 + window.scrollY,
+  };
+};
+
 const ROW_HEIGHT = 18; // px (harus sama dengan HoldRow)
 const DATE_WIDTH = 36;
+const isHourInRange = (hour, start, end) => hour >= start && hour < end;
 
 export default function PlannerForm() {
   const { id } = useParams();
+  const [arrows, setArrows] = useState([
+    // contoh
+    // {
+    //   from: { hold: 4, hour: 10 },
+    //   to: { hold: 2, hour: 18 }
+    // }
+  ]);
+
+  const [drawingArrow, setDrawingArrow] = useState(null);
+  // {
+  //   from: { x, y, hold, hour },
+  //   to: { x, y }
+  // }
 
   const [loading, setLoading] = useState(true);
   const [laporan, setLaporan] = useState(null);
@@ -98,8 +128,46 @@ export default function PlannerForm() {
   const [totalGang, setTotalGang] = useState("");
   const [dischRate, setDischRate] = useState("");
   const [schedule, setSchedule] = useState([]);
+  const [selectedBlocks, setSelectedBlocks] = useState([]); // index schedule[]
+  const [draggingBlock, setDraggingBlock] = useState(null);
+  // { blockIndexes: number[], startHour, currentHour }
 
   const [holdBL, setHoldBL] = useState({});
+  const [dragging, setDragging] = useState(null);
+  /*
+dragging = {
+  hold: number,
+  startHour: number,
+  endHour: number
+}
+*/
+
+  useEffect(() => {
+    const stopDrag = () => {
+      if (!draggingBlock) return;
+
+      const delta = draggingBlock.currentHour - draggingBlock.startHour;
+
+      if (delta !== 0) {
+        setSchedule((prev) =>
+          prev.map((s, idx) =>
+            draggingBlock.blockIndexes.includes(idx)
+              ? {
+                  ...s,
+                  startHour: s.startHour + delta,
+                  endHour: s.endHour + delta,
+                }
+              : s,
+          ),
+        );
+      }
+
+      setDraggingBlock(null);
+    };
+
+    window.addEventListener("mouseup", stopDrag);
+    return () => window.removeEventListener("mouseup", stopDrag);
+  }, [draggingBlock]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -142,6 +210,53 @@ export default function PlannerForm() {
     }
   }, [laporan]);
 
+  useEffect(() => {
+    const stopDrag = () => setDragging(null);
+    window.addEventListener("mouseup", stopDrag);
+    return () => window.removeEventListener("mouseup", stopDrag);
+  }, []);
+
+  useEffect(() => {
+    const move = (e) => {
+      if (!drawingArrow) return;
+
+      setDrawingArrow((prev) => ({
+        ...prev,
+        to: { x: e.clientX, y: e.clientY },
+      }));
+    };
+
+    const up = (e) => {
+      if (!drawingArrow) return;
+
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      if (target?.dataset?.hold) {
+        setArrows((prev) => [
+          ...prev,
+          {
+            from: {
+              hold: drawingArrow.from.hold,
+              hour: drawingArrow.from.hour,
+            },
+            to: {
+              hold: Number(target.dataset.hold),
+              hour: Number(target.dataset.hour),
+            },
+          },
+        ]);
+      }
+
+      setDrawingArrow(null);
+    };
+
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, [drawingArrow]);
+
   const toggleHold = (hold) => {
     setSelectedHolds((prev) => {
       if (prev.includes(hold)) {
@@ -154,6 +269,23 @@ export default function PlannerForm() {
 
   if (loading) return <p>Memuat planner...</p>;
   if (!laporan) return <p>Data tidak ditemukan</p>;
+
+  const startArrow = (e, hold, hour) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+
+    setDrawingArrow({
+      from: {
+        x: rect.right, // sudut kanan
+        y: rect.top + rect.height / 2,
+        hold,
+        hour,
+      },
+      to: {
+        x: rect.right,
+        y: rect.top + rect.height / 2,
+      },
+    });
+  };
 
   const comDiscDate = laporan.startDL?.toDate();
 
@@ -206,6 +338,13 @@ export default function PlannerForm() {
       setSaving(false);
     }
   };
+
+  const getBlockIndexesAt = (hold, hour) =>
+    schedule
+      .map((s, idx) =>
+        s.hold === hold && hour >= s.startHour && hour < s.endHour ? idx : null,
+      )
+      .filter((v) => v !== null);
 
   const baseHour = laporan.commDisch?.toDate()?.getHours() || 0;
 
@@ -307,7 +446,10 @@ export default function PlannerForm() {
             <input
               type="number"
               value={dischRate}
-              onChange={(e) => setDischRate(Number(e.target.value))}
+              onChange={(e) => {
+                const value = e.target.value;
+                setDischRate(value === "" ? "" : Number(e.target.value));
+              }}
             />
           </InfoBox>
 
@@ -376,12 +518,14 @@ export default function PlannerForm() {
                       type="number"
                       placeholder="MT"
                       value={holdBL[h] || ""}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const value = e.target.value;
+
                         setHoldBL((prev) => ({
                           ...prev,
-                          [h]: Number(e.target.value),
-                        }))
-                      }
+                          [h]: value === "" ? "" : Number(value),
+                        }));
+                      }}
                     />
                   )}
                 </HoldCell>
@@ -409,66 +553,178 @@ export default function PlannerForm() {
         </PlannerRow>
         {/* ================= TIME TABLE ================= */}
 
-        {hours.map((time, i) => {
-          const hour = parseInt(time.split(":")[0]);
+        <div style={{ position: "relative" }}>
+          {/* ===== SVG OVERLAY (PANAH) ===== */}
+          <svg
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              zIndex: 10,
+            }}
+          >
+            {arrows.map((a, idx) => {
+              const from = getCellCenter(a.from);
+              const to = getCellCenter(a.to);
 
-          const isNewDay = i % 24 === 0;
-          const dayOffset = Math.floor(i / 24);
-          const currentDate = new Date(comDiscDate);
-          currentDate.setDate(currentDate.getDate() + dayOffset);
+              return (
+                <line
+                  key={idx}
+                  x1={from.x}
+                  y1={from.y}
+                  x2={to.x}
+                  y2={to.y}
+                  stroke="black"
+                  strokeWidth="2"
+                  markerEnd="url(#arrowhead)"
+                />
+              );
+            })}
 
-          const isNewShift = hour === 0 || hour === 8 || hour === 16;
+            {drawingArrow && (
+              <line
+                x1={drawingArrow.from.x}
+                y1={drawingArrow.from.y}
+                x2={drawingArrow.to.x}
+                y2={drawingArrow.to.y}
+                stroke="black"
+                strokeWidth="2"
+                strokeDasharray="5,5"
+              />
+            )}
 
-          return (
-            <PlannerRow key={i}>
-              {/* ================= KIRI ================= */}
-              <LeftHeader>
-                {/* SLOT DATE (kosong tapi konsisten tinggi) */}
-                <DateBox />
+            <defs>
+              <marker
+                id="arrowhead"
+                markerWidth="10"
+                markerHeight="7"
+                refX="10"
+                refY="3.5"
+                orient="auto"
+              >
+                <polygon points="0 0, 10 3.5, 0 7" fill="black" />
+              </marker>
+            </defs>
+          </svg>
 
-                {/* DATE MERGED — hanya di jam pertama */}
-                {isNewDay && (
-                  <DateBoxMerged rows={26.5} rowHeight={ROW_HEIGHT}>
-                    <VerticalDate>
-                      {currentDate.toLocaleDateString("id-ID", {
-                        weekday: "short",
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                      })}
-                    </VerticalDate>
-                  </DateBoxMerged>
-                )}
+          {hours.map((time, i) => {
+            const hour = parseInt(time.split(":")[0]);
 
-                {/* SHIFT */}
-                <ShiftBox>{isNewShift ? getShift(hour) : ""}</ShiftBox>
+            const isNewDay = i % 24 === 0;
+            const dayOffset = Math.floor(i / 24);
+            const currentDate = new Date(comDiscDate);
+            currentDate.setDate(currentDate.getDate() + dayOffset);
 
-                {/* TIME */}
-                <TimeBox bordered>{time}</TimeBox>
-              </LeftHeader>
+            const isNewShift = hour === 0 || hour === 8 || hour === 16;
 
-              {/* ================= KANAN ================= */}
-              <RightTable>
-                <HoldRowCompact>
-                  <HoldLabel />
+            return (
+              <PlannerRow key={i}>
+                {/* ================= KIRI ================= */}
+                <LeftHeader>
+                  {/* SLOT DATE (kosong tapi konsisten tinggi) */}
+                  <DateBox />
 
-                  {[7, 6, 5, 4, 3, 2, 1].map((h) => {
-                    const activeHolds = schedule
-                      .filter((s) => i >= s.startHour && i < s.endHour)
-                      .map((s) => s.hold);
+                  {/* DATE MERGED — hanya di jam pertama */}
+                  {isNewDay && (
+                    <DateBoxMerged rows={26.5} rowHeight={ROW_HEIGHT}>
+                      <VerticalDate>
+                        {currentDate.toLocaleDateString("id-ID", {
+                          weekday: "short",
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                        })}
+                      </VerticalDate>
+                    </DateBoxMerged>
+                  )}
 
-                    return (
-                      <HoldCellCompact
-                        key={h}
-                        active={activeHolds.includes(h)}
-                      />
-                    );
-                  })}
-                </HoldRowCompact>
-              </RightTable>
-            </PlannerRow>
-          );
-        })}
+                  {/* SHIFT */}
+                  <ShiftBox>{isNewShift ? getShift(hour) : ""}</ShiftBox>
+
+                  {/* TIME */}
+                  <TimeBox bordered>{time}</TimeBox>
+                </LeftHeader>
+
+                {/* ================= KANAN ================= */}
+                <RightTable>
+                  <HoldRowCompact>
+                    <HoldLabel />
+
+                    {[7, 6, 5, 4, 3, 2, 1].map((h) => {
+                      const activeBySchedule = schedule.some(
+                        (s) =>
+                          s.hold === h &&
+                          isHourInRange(i, s.startHour, s.endHour),
+                      );
+
+                      const isSelected = selectedBlocks.some(
+                        (idx) =>
+                          schedule[idx]?.hold === h &&
+                          i >= schedule[idx]?.startHour &&
+                          i < schedule[idx]?.endHour,
+                      );
+
+                      const activeByDrag =
+                        dragging &&
+                        dragging.hold === h &&
+                        isHourInRange(i, dragging.startHour, dragging.endHour);
+
+                      return (
+                        <HoldCellCompact
+                          key={h}
+                          active={activeBySchedule || activeByDrag}
+                          data-hold={h}
+                          data-hour={i}
+                          onMouseDown={(e) => {
+                            const blocks = getBlockIndexesAt(h, i);
+                            if (!blocks.length) return; // klik kosong → ignore
+
+                            if (e.ctrlKey || e.metaKey) {
+                              // multi select
+                              setSelectedBlocks((prev) => [
+                                ...new Set([...prev, ...blocks]),
+                              ]);
+                            } else {
+                              setSelectedBlocks(blocks);
+                            }
+
+                            setDraggingBlock({
+                              blockIndexes: blocks,
+                              startHour: i,
+                              currentHour: i,
+                            });
+                          }}
+                          onMouseEnter={() => {
+                            if (!draggingBlock) return;
+
+                            setDraggingBlock((prev) => ({
+                              ...prev,
+                              currentHour: i,
+                            }));
+                          }}
+                          onMouseUp={() => {
+                            if (!dragging) return;
+
+                            setSchedule((prev) => [
+                              ...prev,
+                              {
+                                hold: dragging.hold,
+                                startHour: dragging.startHour,
+                                endHour: dragging.endHour,
+                              },
+                            ]);
+
+                            setDragging(null);
+                          }}
+                        />
+                      );
+                    })}
+                  </HoldRowCompact>
+                </RightTable>
+              </PlannerRow>
+            );
+          })}
+        </div>
       </Section>
     </Wrapper>
   );
